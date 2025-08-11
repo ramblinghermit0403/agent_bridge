@@ -68,6 +68,7 @@ const registerForm = reactive({ username: '', email: '', password: '' });
 const isLoginView = ref(true);
 const message = ref('');
 const isError = ref(false);
+const api_url = import.meta.env.VITE_API_URL || 'http://localhost:8001';
 
 const viewTitle = computed(() => isLoginView.value ? 'Sign in to your account' : 'Create a new account');
 
@@ -80,7 +81,7 @@ const switchView = () => {
 // --- NEW HELPER FUNCTION TO FETCH USER DETAILS ---
 const fetchUserDetails = async (token) => {
   try {
-    const response = await fetch('http://localhost:8001/users/me', {
+    const response = await fetch(`${api_url}/users/me`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -111,7 +112,7 @@ const handleLogin = async () => {
   
   try {
     // Step 1: Log in to get the token
-    const loginResponse = await fetch('http://localhost:8001/login', {
+    const loginResponse = await fetch(`${api_url}/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: formData.toString()
@@ -147,7 +148,7 @@ const handleRegister = async () => {
   isError.value = false;
   const payload = { username: registerForm.username, email: registerForm.email, password: registerForm.password };
   try {
-    const response = await fetch('http://localhost:8001/register', {
+    const response = await fetch(`${api_url}/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)

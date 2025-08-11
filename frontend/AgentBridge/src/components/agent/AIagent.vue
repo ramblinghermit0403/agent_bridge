@@ -105,6 +105,7 @@ import { nextTick } from "vue";
 export default {
   data() {
     return {
+      api_url: import.meta.env.VITE_API_URL || "http://localhost:8001",
       isWelcomeBoxClosed: false,
       token: localStorage.getItem("token"),
       messages: [],
@@ -169,7 +170,7 @@ export default {
       this.isWelcomeBoxClosed = true;
 
       try {
-        const response = await fetch(`http://localhost:8001/api/chats/${this.sessionId}`, {
+        const response = await fetch(`${this.api_url}/api/chats/${this.sessionId}`, {
           headers: {
             'Authorization': `Bearer ${this.token}`
           }
@@ -249,7 +250,7 @@ export default {
       try {
         if (this.eventSource) this.eventSource.close();
 
-        const baseUrl = `http://localhost:8001/ask/stream`;
+        const baseUrl = `${this.api_url}/ask/stream`;
         const params = new URLSearchParams();
         params.append("prompt", prompt);
         params.append("token", userToken);

@@ -127,7 +127,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue';
 
-const BACKEND_BASE_URL = 'http://localhost:8001';
+const BACKEND_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
 const activeCategory = ref('profile'); // Default to profile
 
 // --- Profile State ---

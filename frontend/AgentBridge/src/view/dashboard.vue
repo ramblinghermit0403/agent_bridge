@@ -152,6 +152,7 @@ const userName = ref('');
 const profilePopup = ref(null);
 const profileButton = ref(null);
 const conversations = ref([]);
+const api_url = import.meta.env.VITE_API_URL || 'http://localhost:8001';
 
 const userInitial = computed(() => (userName.value ? userName.value.charAt(0).toUpperCase() : '?'));
 const themeClass = computed(() => (isDarkMode.value ? 'dark-theme' : 'light-theme'));
@@ -193,7 +194,7 @@ const loadConversationsList = async () => {
   }
 
   try {
-    const response = await fetch(`http://localhost:8001/api/chats/`, {
+    const response = await fetch(`${api_url}/api/chats/`, {
       headers: {
         'Authorization': `Bearer ${token}`
       }
