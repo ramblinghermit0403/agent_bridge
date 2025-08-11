@@ -2,7 +2,8 @@ from fastapi import Depends, HTTPException, status, APIRouter
 import jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.security import OAuth2PasswordBearer
-from jwt.exceptions import InvalidTokenError
+
+from jwt.exceptions import PyJWTError
 from ..schemas import JWTtoken_schema, user
 from ..models import User
 from ..database import database
@@ -33,7 +34,7 @@ async def get_current_user(
             raise credentials_exception
         
         token_data = JWTtoken_schema.TokenData(email=email)
-    except InvalidTokenError:
+    except PyJWTError:
         raise credentials_exception
     
     result = await db.execute(
