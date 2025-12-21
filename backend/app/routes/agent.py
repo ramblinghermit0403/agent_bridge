@@ -411,7 +411,7 @@ async def ask_agent_stream(
     chat_history = await memory.aget_messages()
         
     formatter_prompt = build_formatter_prompt()
-    llm_formatter = ChatGoogleGenerativeAI(model="gemini-2.0-flash", google_api_key=os.getenv("GOOGLE_API_KEY"), temperature=0)
+    llm_formatter = ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=os.getenv("GOOGLE_API_KEY"), temperature=0)
     formatter_chain = formatter_prompt | llm_formatter | StrOutputParser()
 
 

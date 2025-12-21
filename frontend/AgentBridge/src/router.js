@@ -52,13 +52,33 @@ const router = createRouter({
 })
 
 // Navigation guard (no changes needed here for the routing logic)
-router.beforeEach((to, from, next) => {
-  const token = localStorage.getItem('token')
+router.beforeEach(async (to, from, next) => {
+  let token = localStorage.getItem('token')
 
+  // Auto-init Guest if no token
+  if (!token) {
+     try {
+       const BACKEND_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
+       const res = await fetch(`${BACKEND_BASE_URL}/auth/login/guest`, { method: 'POST' });
+       if (res.ok) {
+           const data = await res.json();
+           localStorage.setItem('token', data.access_token);
+           localStorage.setItem('user', JSON.stringify(data.user));
+           token = data.access_token;
+           // Optional: Toast "Entered as Guest"
+       } else {
+           console.error("Failed to init guest");
+       }
+     } catch (e) {
+       console.error("Error init guest", e);
+     }
+  }
+
+  // Check Auth Requirements (if any are active)
   if (to.matched.some((record) => record.meta.requiresAuth)) {
     if (!token) {
       toast.error('Session expired. Please log in again.')
-      return next('/')
+      return next('/login') // Fallback to login if guest failed
     }
 
     try {
@@ -67,15 +87,20 @@ router.beforeEach((to, from, next) => {
 
       if (payload.exp < now) {
         localStorage.removeItem('token')
+        // Try guest again? Or just redirect login.
+        // For simplicity, redirect login if expired.
         toast.error('Session expired. Please log in again.')
-        return next('/')
+        return next('/login')
       }
     } catch (error) {
       localStorage.removeItem('token')
-      toast.error('Invalid session. Please log in again.')
-      return next('/')
+      return next('/login')
     }
   }
+
+  // If going to login but we are already guest?
+  // User might want to login to real account.
+  // So allow going to login.
 
   next()
 })

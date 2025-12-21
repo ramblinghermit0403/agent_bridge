@@ -65,3 +65,32 @@ async def login(request: OAuth2PasswordRequestForm = Depends(), db: AsyncSession
     access_token = JWTtoken.create_access_token(data={"sub": user.email})
 
     return {"access_token": access_token, "token_type": "bearer"}
+
+@router.post("/login/guest")
+async def login_guest(db: AsyncSession = Depends(database.get_db)):
+    import uuid
+    # Create unique guest identity
+    guest_uuid = str(uuid.uuid4())
+    guest_email = f"guest_{guest_uuid}@brainvault.app"
+    
+    # Create guest user
+    new_guest = User.User(
+        id=guest_uuid,
+        username="Guest User",
+        email=guest_email,
+        password_hash=None, # No password
+        is_guest=True
+    )
+    
+    db.add(new_guest)
+    await db.commit()
+    await db.refresh(new_guest)
+    
+    # Generate token (Guest tokens valid for 30 days)
+    from datetime import timedelta
+    access_token = JWTtoken.create_access_token(
+        data={"sub": guest_email},
+        expires_delta=timedelta(days=30) 
+    )
+    
+    return {"access_token": access_token, "token_type": "bearer", "is_guest": True, "user": {"email": guest_email, "username": "Guest User"}}

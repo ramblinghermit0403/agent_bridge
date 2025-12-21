@@ -112,7 +112,7 @@ const handleLogin = async () => {
   
   try {
     // Step 1: Log in to get the token
-    const loginResponse = await fetch(`${api_url}/login`, {
+    const loginResponse = await fetch(`${api_url}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: formData.toString()
@@ -147,10 +147,17 @@ const handleRegister = async () => {
   message.value = 'Creating account...';
   isError.value = false;
   const payload = { username: registerForm.username, email: registerForm.email, password: registerForm.password };
+  
+  const token = localStorage.getItem('token');
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   try {
     const response = await fetch(`${api_url}/register`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: headers,
       body: JSON.stringify(payload)
     });
     const data = await response.json();

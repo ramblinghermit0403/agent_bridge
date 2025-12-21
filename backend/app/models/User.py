@@ -9,8 +9,9 @@ from sqlalchemy import Index, text
 class User(database.Base):
     __tablename__="Users"
     id=Column(String, primary_key=True)
-    username=Column(String)
-    email=Column(String)
-    password_hash=Column(String)
+    username=Column(String, nullable=True) # Username optional for guest
+    email=Column(String, nullable=True)    # Email optional for guest
+    password_hash=Column(String, nullable=True) # Password optional for guest
+    is_guest=Column(Boolean, default=False)
 
 

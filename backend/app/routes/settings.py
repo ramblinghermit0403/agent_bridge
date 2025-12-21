@@ -13,6 +13,7 @@ from ..models import User
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..database import database
 from sqlalchemy import select
+from ..core.preapproved_servers import preapproved_mcp_servers
 
 
 # Configure CORS (adjust origins as per your frontend's URL)
@@ -158,6 +159,14 @@ async def delete_mcp_setting(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete setting: {str(e)}"
         )
+
+# Route to get preapproved MCP servers
+@router.get("/api/mcp/preapproved-servers")
+async def get_preapproved_servers():
+    """
+    Returns a list of preapproved MCP servers.
+    """
+    return preapproved_mcp_servers
     
 
 from fastapi import Depends, HTTPException

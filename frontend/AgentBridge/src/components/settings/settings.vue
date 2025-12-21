@@ -100,6 +100,25 @@
           </div>
           <p v-else class="setting-description" style="margin-top: 1rem;">No MCP server connections saved yet.</p>
           <hr class="settings-divider">
+          
+          <h3>Available Preapproved Servers</h3>
+          <div v-if="preapprovedServers.length > 0">
+             <div v-for="server in preapprovedServers" :key="server.server_name" class="setting-item connection-item">
+               <div class="setting-info">
+                 <label class="setting-label">{{ server.server_name }}</label>
+                 <p class="setting-description">{{ server.description }}</p>
+                 <p class="setting-description small-text">URL: {{ server.server_url }} <span v-if="server.type === 'local'" style="color: var(--accent-color); font-weight: bold;">(Requires Local Setup)</span></p>
+               </div>
+               <div class="setting-control">
+                  <button @click="addPreapprovedServer(server)" class="form-button small-button" :disabled="mcpServerSettings.some(s => s.server_name === server.server_name)">
+                    {{ mcpServerSettings.some(s => s.server_name === server.server_name) ? 'Added' : 'Add' }}
+                  </button>
+               </div>
+             </div>
+          </div>
+          <p v-else class="setting-description">No preapproved servers available.</p>
+          
+          <hr class="settings-divider">
           <h3>Add New MCP Server</h3>
           <div class="setting-item">
             <div class="setting-info"><label for="newServerName" class="setting-label">Server Name</label><p class="setting-description">A friendly, unique name for this connection (e.g., "My Dev MCP").</p></div>
@@ -141,6 +160,7 @@ const compactUiEnabled = ref(false);
 
 // --- Connections State ---
 const mcpServerSettings = ref([]);
+const preapprovedServers = ref([]);
 const newMcpServer = reactive({ server_name: '', server_url: '', is_active: true, description: '' });
 
 // --- UTILITY & NAVIGATION ---
@@ -155,7 +175,11 @@ const getAuthHeaders = () => {
 const setActiveCategory = (category) => {
   activeCategory.value = category;
   if (category === 'profile') loadProfileData();
-  if (category === 'connections') fetchMcpServerSettings();
+  if (category === 'profile') loadProfileData();
+  if (category === 'connections') {
+    fetchMcpServerSettings();
+    fetchPreapprovedServers();
+  }
 };
 
 // --- PROFILE METHODS ---
@@ -203,6 +227,38 @@ const fetchMcpServerSettings = async () => {
     if (response.ok) mcpServerSettings.value = await response.json();
     else { const e = await response.json(); alert(`Fetch failed: ${e.detail}`); }
   } catch (e) { alert(`Error: ${e.message}`); }
+};
+
+const fetchPreapprovedServers = async () => {
+  const headers = getAuthHeaders(); if (!headers) return;
+  try {
+    const response = await fetch(`${BACKEND_BASE_URL}/api/mcp/preapproved-servers`, { headers });
+    if (response.ok) preapprovedServers.value = await response.json();
+    else { console.error("Failed to fetch preapproved servers"); }
+  } catch (e) { console.error("Error fetching preapproved servers:", e); }
+};
+
+const addPreapprovedServer = async (server) => {
+  const exists = mcpServerSettings.value.some(s => s.server_name === server.server_name);
+  if (exists) { alert('This server is already in your list.'); return; }
+  
+  const headers = getAuthHeaders(); if (!headers) return;
+  
+  const finalPayload = {
+      server_name: server.server_name,
+      server_url: server.server_url,
+      description: server.description,
+      is_active: true
+  };
+
+  try {
+      const res = await fetch(`${BACKEND_BASE_URL}/api/mcp/settings/`, { method: 'POST', headers, body: JSON.stringify(finalPayload) });
+      if (res.ok) {
+        const saved = await res.json();
+        alert('Server added successfully!');
+        mcpServerSettings.value.push(saved);
+      } else { const e = await res.json(); alert(`Failed to add server: ${e.detail}`); }
+  } catch(e) { alert(`Error: ${e.message}`); }
 };
 
 const testNewConnection = async () => {

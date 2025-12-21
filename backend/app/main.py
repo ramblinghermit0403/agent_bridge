@@ -51,7 +51,7 @@ app = FastAPI(lifespan=lifespan)
 
 # Include the agent router
 app.include_router(agent.router)
-app.include_router(auth.router)
+app.include_router(auth.router, prefix="/auth")
 app.include_router(user.router)
 app.include_router(settings.router)
 
