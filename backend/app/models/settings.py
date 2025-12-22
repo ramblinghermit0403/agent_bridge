@@ -20,6 +20,7 @@ class McpServerSetting(database.Base):
     server_url = Column(String, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     description = Column(String, nullable=True)
+    credentials = Column(String, nullable=True) # JSON string: {access_token, refresh_token, expiry, provider}
 
     # Adding a unique constraint for (user_id, server_name)
     # This ensures a user cannot have two settings with the same name.

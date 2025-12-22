@@ -1,6 +1,6 @@
 import json
 import time
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 # Import the single, shared Redis client instance
 from .redis_client import redis_client
@@ -150,12 +150,12 @@ from ...models.settings import McpServerSetting
 
 logger = logging.getLogger(__name__)
 
-async def get_user_servers(db: AsyncSession, user_id: str) -> Dict[str, str]:
+async def get_user_servers(db: AsyncSession, user_id: str) -> Dict[str, Dict[str, Any]]:
     """
     Fetches all ACTIVE McpServerSetting records for a user from the database
     and transforms them into a dictionary suitable for the agent factory.
     
-    Format: {"server_name": "server_url", ...}
+    Format: {"server_name": {"url": "...", "credentials": "..."}, ...}
     """
     logger.info(f"Fetching active MCP server settings for user_id: {user_id}")
 
@@ -172,8 +172,12 @@ async def get_user_servers(db: AsyncSession, user_id: str) -> Dict[str, str]:
     user_settings = result.scalars().all()
     
     # 3. Transform the list of model objects into a dictionary
-    #    The agent will use the 'server_name' from your DB as part of the tool name.
-    server_dict = {setting.server_name: setting.server_url for setting in user_settings}
+    server_dict = {}
+    for setting in user_settings:
+        server_dict[setting.server_name] = {
+            "url": setting.server_url,
+            "credentials": setting.credentials 
+        }
     
     if server_dict:
         logger.info(f"Found {len(server_dict)} active servers for user {user_id}: {list(server_dict.keys())}")
