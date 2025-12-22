@@ -183,7 +183,7 @@ export default {
             let isHtml = false;
 
             if (msg.role === "agent" && msg.additional_kwargs?.html) {
-              const cleanedHtml = msg.additional_kwargs.html.trim().replace(/^```html/, '').replace(/```$/, '');
+              const cleanedHtml = msg.additional_kwargs.html.replace(/```html/g, '').replace(/```/g, '').trim();
               messageText = cleanedHtml;
               isHtml = true;
             } else {
@@ -301,7 +301,7 @@ export default {
           const data = JSON.parse(event.data);
           if (this.messages[this.currentAgentMessageIndex]) {
             const rawHtml = data.content;
-            const cleanedHtml = rawHtml.trim().replace(/^```html/, '').replace(/```$/, '');
+            const cleanedHtml = rawHtml.replace(/```html/g, '').replace(/```/g, '').trim();
 
             this.messages[this.currentAgentMessageIndex].text = cleanedHtml;
             this.messages[this.currentAgentMessageIndex].html = true;

@@ -1,0 +1,42 @@
+[
+  {
+    "url": "https://mcp.notion.com/.well-known/oauth-authorization-server",
+    "status": 200,
+    "metadata": {
+      "issuer": "https://mcp.notion.com",
+      "authorization_endpoint": "https://mcp.notion.com/authorize",
+      "token_endpoint": "https://mcp.notion.com/token",
+      "registration_endpoint": "https://mcp.notion.com/register",
+      "response_types_supported": [
+        "code"
+      ],
+      "response_modes_supported": [
+        "query"
+      ],
+      "grant_types_supported": [
+        "authorization_code",
+        "refresh_token"
+      ],
+      "token_endpoint_auth_methods_supported": [
+        "client_secret_basic",
+        "client_secret_post",
+        "none"
+      ],
+      "revocation_endpoint": "https://mcp.notion.com/token",
+      "code_challenge_methods_supported": [
+        "plain",
+        "S256"
+      ]
+    }
+  },
+  {
+    "url": "https://api.notion.com/.well-known/oauth-authorization-server",
+    "status": 400,
+    "error": "{\"object\":\"error\",\"status\":400,\"code\":\"invalid_request_url\",\"message\":\"Invalid request URL.\",\"request_id\":\"b60f7321-1eb7-47ab-befe-d58d43416492\"}"
+  },
+  {
+    "url": "https://mcp.notion.com/mcp/.well-known/oauth-authorization-server",
+    "status": 401,
+    "error": "{\"error\":\"invalid_token\",\"error_description\":\"Missing or invalid access token\"}"
+  }
+]

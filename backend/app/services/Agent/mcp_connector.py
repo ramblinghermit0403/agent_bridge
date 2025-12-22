@@ -17,8 +17,22 @@ class MCPConnector:
         self._credentials = self._parse_credentials(credentials)
         self._token = self._extract_token()
         
-        header_name = "X-Figma-Token" if "figma.com" in server_url else "Authorization"
-        header_val = self._token if "figma.com" in server_url else f"Bearer {self._token}"
+        # Determine header format based on server
+        if "figma.com" in server_url:
+            header_name = "X-Figma-Token"
+            header_val = self._token
+        elif "notion.com" in server_url:
+            header_name = "Authorization"
+            header_val = f"Bearer {self._token}"
+            # Notion also requires Notion-Version header
+            self._headers = {
+                header_name: header_val,
+                "Notion-Version": "2022-06-28"
+            } if self._token else {}
+            return
+        else:
+            header_name = "Authorization"
+            header_val = f"Bearer {self._token}"
         
         self._headers = {header_name: header_val} if self._token else {}
 

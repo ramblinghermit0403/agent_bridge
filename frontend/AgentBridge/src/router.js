@@ -7,6 +7,7 @@ import LearnMoreView from './view/LearnMoreView.vue'; // <-- IMPORT the new view
 import login from './components/login/login.vue' // Assuming you have a login component
 import { useToast } from 'vue-toastification'
 import LibraryView from './components/library/LibraryView.vue'; // <-- IMPORT the library view
+import AuthCallback from './view/AuthCallback.vue';
 
 const toast = useToast()
 
@@ -15,6 +16,10 @@ const routes = [
   {
     path: '/',
     redirect: '/agent'
+  },
+  {
+    path: '/auth-callback',
+    component: AuthCallback
   },
   {
     path: '/login',
@@ -57,21 +62,21 @@ router.beforeEach(async (to, from, next) => {
 
   // Auto-init Guest if no token
   if (!token) {
-     try {
-       const BACKEND_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
-       const res = await fetch(`${BACKEND_BASE_URL}/auth/login/guest`, { method: 'POST' });
-       if (res.ok) {
-           const data = await res.json();
-           localStorage.setItem('token', data.access_token);
-           localStorage.setItem('user', JSON.stringify(data.user));
-           token = data.access_token;
-           // Optional: Toast "Entered as Guest"
-       } else {
-           console.error("Failed to init guest");
-       }
-     } catch (e) {
-       console.error("Error init guest", e);
-     }
+    try {
+      const BACKEND_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
+      const res = await fetch(`${BACKEND_BASE_URL}/auth/login/guest`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        localStorage.setItem('token', data.access_token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        token = data.access_token;
+        // Optional: Toast "Entered as Guest"
+      } else {
+        console.error("Failed to init guest");
+      }
+    } catch (e) {
+      console.error("Error init guest", e);
+    }
   }
 
   // Check Auth Requirements (if any are active)

@@ -1,0 +1,57 @@
+﻿
+=== Testing: https://mcp.notion.com/.well-known/oauth-authorization-server ===
+Status: 200
+Error: 'charmap' codec can't encode character '\u2705' in position 0: character maps to <undefined>
+
+uv : Traceback (most recent call last):
+At line:1 char:1
++ uv run check_oauth_metadata.py 2>&1 | 
+Out-File -FilePath oauth_metada ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Tr 
+   aceback (most recent call last)::String) []  
+  , RemoteException
+    + FullyQualifiedErrorId : NativeCommandErro 
+   r
+ 
+  File "C:\Users\himan\OneDrive\Documents\ai 
+agent mcp\backend\check_oauth_metadata.py", 
+line 37, in <module>
+=== Testing: https://api.notion.com/.well-known/oauth-authorization-server ===
+Status: 400
+Not found: {"object":"error","status":400,"code":"invalid_request_url","message":"Invalid request URL.","request_id":"b1d8d80f-d1e8-4012-94fd-44c5fe1e3b49"}
+
+=== Testing: https://mcp.notion.com/mcp/.well-known/oauth-authorization-server ===
+Status: 401
+Not found: {"error":"invalid_token","error_description":"Missing or invalid access token"}
+    asyncio.run(check_notion_oauth_metadata())
+  File "C:\Users\himan\AppData\Local\Programs\Py
+thon\Python312\Lib\asyncio\runners.py", line 
+194, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "C:\Users\himan\AppData\Local\Programs\Py
+thon\Python312\Lib\asyncio\runners.py", line 
+118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\himan\AppData\Local\Programs\Py
+thon\Python312\Lib\asyncio\base_events.py", 
+line 687, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "C:\Users\himan\OneDrive\Documents\ai 
+agent mcp\backend\check_oauth_metadata.py", 
+line 33, in check_notion_oauth_metadata
+    print("\n\u274c No OAuth metadata found at 
+standard endpoints")
+  File "C:\Users\himan\AppData\Local\Programs\Py
+thon\Python312\Lib\encodings\cp1252.py", line 
+19, in encode
+    return codecs.charmap_encode(input,self.erro
+rs,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't 
+encode character '\u274c' in position 2: 
+character maps to <undefined>

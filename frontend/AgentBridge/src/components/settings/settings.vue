@@ -93,8 +93,9 @@
               </div>
               <div class="setting-control">
                 <button @click="editSetting(setting)" class="form-button small-button">Edit</button>
-                <button @click="deleteSetting(setting.id)" class="form-button small-button delete-button">Delete</button>
-                <label class="toggle-switch"><input type="checkbox" v-model="setting.is_active" @change="toggleSettingActive(setting)"><span class="slider"></span></label>
+                <button @click="deleteSetting(setting.id)" class="form-button small-button delete-button">Disconnect</button>
+                <button @click="viewTools(setting)" class="form-button small-button secondary-button" style="margin-left: 0.5rem;">View Tools</button>
+                <label class="toggle-switch" style="margin-left: 0.5rem;"><input type="checkbox" v-model="setting.is_active" @change="toggleSettingActive(setting)"><span class="slider"></span></label>
               </div>
             </div>
           </div>
@@ -110,7 +111,10 @@
                  <p class="setting-description small-text">URL: {{ server.server_url }} <span v-if="server.type === 'local'" style="color: var(--accent-color); font-weight: bold;">(Requires Local Setup)</span></p>
                </div>
                <div class="setting-control">
-                  <button @click="addPreapprovedServer(server)" class="form-button small-button" :disabled="mcpServerSettings.some(s => s.server_name === server.server_name)">
+                  <button v-if="server.requires_auth" @click="openAuthModal(server)" class="form-button small-button" :disabled="mcpServerSettings.some(s => s.server_name === 'Figma')">
+                    {{ mcpServerSettings.some(s => s.server_name === 'Figma') ? 'Connected' : 'Connect' }}
+                  </button>
+                  <button v-else @click="addPreapprovedServer(server)" class="form-button small-button" :disabled="mcpServerSettings.some(s => s.server_name === server.server_name)">
                     {{ mcpServerSettings.some(s => s.server_name === server.server_name) ? 'Added' : 'Add' }}
                   </button>
                </div>
@@ -135,6 +139,62 @@
           <div class="setting-item save-section">
             <button @click="testNewConnection" class="form-button secondary-button">Test New Connection</button>
             <button @click="saveNewConnection" class="form-button primary-button">Save New Connection</button>
+          </div>
+        </div>
+        
+        <!-- AUTH MODAL -->
+        <div v-if="showAuthModal" class="modal-overlay">
+          <div class="modal-content">
+            <h3 class="modal-title">Connect to {{ authConfig.server?.server_name }}</h3>
+            <p class="setting-description" style="margin-bottom: 1.5rem;">
+              To connect securely, you need to provide your OAuth credentials. 
+              The app will then open a popup to authenticate you with {{ authConfig.server?.server_name }}.
+            </p>
+            
+            <div v-if="!authConfig.usingSharedId">
+                <div class="setting-item" style="border:none; padding: 0.5rem 0;">
+                    <div class="setting-info" style="padding:0;"><label>Client ID</label></div>
+                    <div class="setting-control" style="width: 100%;"><input type="text" v-model="authConfig.client_id" class="form-input" :placeholder="`Enter Client ID from your Public ${authConfig.server?.server_name} App`"></div>
+                </div>
+                
+                <p class="setting-description small-text" style="background: rgba(0,0,0,0.03); padding: 8px; border-radius: 4px;">
+                    <strong>Why?</strong> The OAuth protocol requires an ID to identify which app is asking for permission. 
+                    Since this is a custom client, you need your own ID. 
+                    <br><br>
+                    Create an OAuth app in the <strong>{{ authConfig.server?.server_name }}</strong> Developer settings.
+                </p>
+            </div>
+            <div v-else>
+                 <p class="setting-description" style="background: rgba(0,255,0,0.05); padding: 1rem; border-radius: 8px; text-align: center;">
+                    <strong>Managed Authentication is Active</strong><br>
+                    This server is pre-configured with a shared Client ID.<br>
+                    Just click below to connect.
+                 </p>
+            </div>
+            
+            <div class="modal-footer">
+               <button @click="closeAuthModal" class="form-button secondary-button">Cancel</button>
+               <button @click="startOAuthFlow" class="form-button primary-button">Authenticate & Connect</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- TOOLS MODAL -->
+        <div v-if="showToolsModal" class="modal-overlay" @click.self="showToolsModal = false">
+          <div class="modal-content" style="max-width: 600px;">
+            <h3 class="modal-title">Available Tools</h3>
+            <div v-if="currentServerTools.length === 0" style="padding: 20px; text-align: center; color: var(--text-secondary);">
+              No tools found or failed to fetch.
+            </div>
+            <ul v-else style="list-style: none; padding: 0; max-height: 400px; overflow-y: auto; margin-top: 1rem;">
+              <li v-for="tool in currentServerTools" :key="tool.name" style="border-bottom: 1px solid var(--border-color); padding: 10px 0;">
+                <div style="font-weight: 600; font-size: 1em;">{{ tool.name }}</div>
+                <div style="color: var(--text-secondary); font-size: 0.9em; margin-top: 4px;">{{ tool.description }}</div>
+              </li>
+            </ul>
+            <div class="modal-footer" style="margin-top: 20px;">
+              <button @click="showToolsModal = false" class="form-button secondary-button">Close</button>
+            </div>
           </div>
         </div>
 
@@ -303,6 +363,135 @@ const deleteSetting = async (settingId) => {
     if (res.ok) { alert('Deleted!'); mcpServerSettings.value = mcpServerSettings.value.filter(s => s.id !== settingId); }
     else { const e = await res.json(); alert(`Delete failed: ${e.detail}`); }
   } catch (e) { alert(`Error: ${e.message}`); }
+};
+
+
+// --- AUTH MODAL STATE ---
+const showAuthModal = ref(false);
+const authConfig = reactive({
+  server: null,
+  client_id: '', // User needs to provide this
+  client_secret: '',
+  usingSharedId: false
+});
+
+const showToolsModal = ref(false);
+const currentServerTools = ref([]);
+
+const openAuthModal = (server) => {
+  authConfig.server = server;
+  
+  let config = server.oauth_config;
+  // If no config (e.g. saved setting), try to find in preapproved list
+  if (!config) {
+      const match = preapprovedServers.value.find(s => s.server_name === server.server_name);
+      if (match && match.oauth_config) {
+          config = match.oauth_config;
+      }
+  }
+
+  // Check if server operates with a shared Client ID
+  const sharedId = config?.client_id;
+  
+  if (sharedId) {
+      authConfig.client_id = sharedId;
+      authConfig.usingSharedId = true;
+  } else {
+      authConfig.client_id = '';
+      authConfig.usingSharedId = false;
+  }
+  
+  authConfig.client_secret = '';
+  showAuthModal.value = true;
+};
+
+const closeAuthModal = () => {
+  showAuthModal.value = false;
+  authConfig.server = null;
+};
+
+const startOAuthFlow = async () => {
+  if (!authConfig.usingSharedId && !authConfig.client_id) {
+     alert("Please provide Client ID");
+     return;
+  }
+  
+  const headers = getAuthHeaders();
+  if(!headers) return;
+
+  try {
+     // PKCE Flow: Send Client ID (no secret) to backend init
+     const initRes = await fetch(`${BACKEND_BASE_URL}/api/mcp/oauth/init`, {
+         method: 'POST',
+         headers,
+         body: JSON.stringify({
+             server_name: authConfig.server.server_name,
+             client_id: authConfig.client_id,
+             client_secret: "", // Not used
+             redirect_uri: `${BACKEND_BASE_URL}/api/mcp/oauth/callback`
+         })
+     });
+     
+     if (!initRes.ok) {
+         const err = await initRes.json();
+         alert(`Error starting auth: ${err.detail}`);
+         return;
+     }
+     
+     const { auth_url } = await initRes.json();
+     
+     // Listen for callback
+     const popup = window.open(auth_url, 'OAuth', 'width=600,height=700');
+     
+     const messageHandler = async (event) => {
+         if (event.data.type === 'oauth-callback') {
+             window.removeEventListener('message', messageHandler);
+             // Finalize
+             try {
+                 const finalRes = await fetch(`${BACKEND_BASE_URL}/api/mcp/oauth/finalize?code=${event.data.code}&state=${event.data.state}`, {
+                     method: 'POST',
+                     headers
+                 });
+                 if (finalRes.ok) {
+                     alert("Connected successfully!");
+                     closeAuthModal();
+                     fetchMcpServerSettings(); // Refresh list
+                 } else {
+                     const err = await finalRes.json();
+                     alert(`Failed to finalize connection: ${err.detail}`);
+                 }
+             } catch(e) {
+                 console.error(e);
+                 alert("Error finalizing connection.");
+             }
+         }
+     };
+     window.addEventListener('message', messageHandler);
+     
+  } catch(e) {
+      console.error(e);
+      alert("Error initiating auth flow.");
+  }
+};
+
+const viewTools = async (server) => {
+  const headers = getAuthHeaders();
+  if(!headers) return;
+  
+  try {
+    const response = await fetch(`${BACKEND_BASE_URL}/api/mcp/settings/${server.id}/tools`, { headers });
+    if (response.ok) {
+      const data = await response.json();
+      currentServerTools.value = data.tools;
+      showToolsModal.value = true;
+    } else {
+      const e = await response.json();
+      alert(`Failed to fetch tools: ${e.detail || response.statusText}`);
+    }
+  } catch (error) {
+    console.error("Error fetching tools:", error);
+    alert("Error fetching tools: " + error.message);
+  }
 };
 
 // --- LIFECYCLE HOOK ---
@@ -621,6 +810,7 @@ onMounted(() => {
 
 .form-button.delete-button:hover {
   background-color: #c82333;
+  border-color: #dc3545;
 }
 
 .save-section {
@@ -691,4 +881,42 @@ onMounted(() => {
   transform: translateX(20px);
 }
 
+/* MODAL STYLES */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 2rem;
+  width: 100%;
+  max-width: 500px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.modal-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+  color: var(--text-primary);
+}
+
+.modal-footer {
+  margin-top: 2rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+}
 </style>

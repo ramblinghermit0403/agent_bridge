@@ -14,6 +14,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..database import database
 from sqlalchemy import select
 from ..core.preapproved_servers import preapproved_mcp_servers
+import base64
+import hashlib
+import secrets
 
 
 # Configure CORS (adjust origins as per your frontend's URL)
@@ -367,6 +370,12 @@ async def init_oauth_flow(request: OAuthInitRequest):
     if not client_id:
         raise HTTPException(status_code=400, detail="Client ID missing (not provided or configured).")
     
+    # Generate PKCE parameters (required for OAuth 2.1)
+    code_verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode('utf-8').rstrip('=')
+    code_challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(code_verifier.encode('utf-8')).digest()
+    ).decode('utf-8').rstrip('=')
+    
     state = str(uuid.uuid4())
     oauth_states[state] = {
         "client_id": client_id,
@@ -374,7 +383,8 @@ async def init_oauth_flow(request: OAuthInitRequest):
         "redirect_uri": request.redirect_uri,
         "token_url": token_url,
         "server_url": server['server_url'],
-        "server_name": server['server_name']
+        "server_name": server['server_name'],
+        "code_verifier": code_verifier  # Store for token exchange
     }
     
     params = {
@@ -383,7 +393,13 @@ async def init_oauth_flow(request: OAuthInitRequest):
         "scope": scope,
         "state": state,
         "response_type": "code",
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256"
     }
+    
+    # Notion requires owner=user parameter
+    if server['server_name'] == "Notion":
+        params["owner"] = "user"
     
     auth_url = f"{auth_url_base}?{urlencode(params)}"
     return {"auth_url": auth_url}
@@ -437,7 +453,7 @@ async def finalize_oauth_flow(
     # Exchange code for token
     async with httpx.AsyncClient() as client:
         try:
-           # Figma requires Basic Auth for the client_id:client_secret
+           # Figma/GitHub use Basic Auth, Notion uses client credentials in body
            auth = httpx.BasicAuth(stored_state['client_id'], stored_state['client_secret'])
            
            data = {
@@ -445,6 +461,11 @@ async def finalize_oauth_flow(
                "code": code,
                "grant_type": "authorization_code",
            }
+           
+           # Add PKCE code_verifier if present (OAuth 2.1)
+           if "code_verifier" in stored_state:
+               data["code_verifier"] = stored_state['code_verifier']
+           
            print(f"DEBUG: Sending token request to {stored_state['token_url']}")
            
            resp = await client.post(

@@ -57,5 +57,21 @@ preapproved_mcp_servers = [
             "scope": "repo user",
             "redirect_uri": "http://localhost:8001/api/mcp/oauth/callback"
         }
+    },
+    {
+        "server_name": "Notion",
+        "server_url": "https://mcp.notion.com/mcp",
+        "description": "Connect to Notion workspace to access pages, databases, and content.",
+        "type": "remote",
+        "requires_auth": True,
+        "oauth_config": {
+            "client_id": os.environ.get("NOTION_CLIENT_ID"),
+            "client_secret": os.environ.get("NOTION_CLIENT_SECRET"),
+            # Use MCP-specific OAuth endpoints (discovered via .well-known/oauth-authorization-server)
+            "authorization_url": "https://mcp.notion.com/authorize",
+            "token_url": "https://mcp.notion.com/token",
+            "scope": "",  # Notion uses implicit scope based on integration capabilities
+            "redirect_uri": "http://localhost:8001/api/mcp/oauth/callback"
+        }
     }
 ]
