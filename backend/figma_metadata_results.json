@@ -1,0 +1,103 @@
+[
+  {
+    "url": "https://mcp.figma.com/.well-known/oauth-authorization-server",
+    "status": 200,
+    "metadata": {
+      "issuer": "https://api.figma.com",
+      "authorization_endpoint": "https://www.figma.com/oauth/mcp",
+      "token_endpoint": "https://api.figma.com/v1/oauth/token",
+      "grant_types_supported": [
+        "authorization_code",
+        "refresh_token"
+      ],
+      "response_types_supported": [
+        "code"
+      ],
+      "registration_endpoint": "https://api.figma.com/v1/oauth/mcp/register",
+      "code_challenge_methods_supported": [
+        "S256"
+      ],
+      "scopes_supported": [
+        "mcp:connect"
+      ],
+      "require_state_parameter": true
+    }
+  },
+  {
+    "url": "https://api.figma.com/.well-known/oauth-authorization-server",
+    "status": 200,
+    "metadata": {
+      "issuer": "https://api.figma.com",
+      "authorization_endpoint": "https://www.figma.com/oauth/mcp",
+      "token_endpoint": "https://api.figma.com/v1/oauth/token",
+      "grant_types_supported": [
+        "authorization_code",
+        "refresh_token"
+      ],
+      "response_types_supported": [
+        "code"
+      ],
+      "registration_endpoint": "https://api.figma.com/v1/oauth/mcp/register",
+      "code_challenge_methods_supported": [
+        "S256"
+      ],
+      "scopes_supported": [
+        "mcp:connect"
+      ],
+      "require_state_parameter": true
+    }
+  },
+  {
+    "url": "https://www.figma.com/.well-known/oauth-authorization-server",
+    "status": 200,
+    "metadata": {
+      "issuer": "https://api.figma.com",
+      "authorization_endpoint": "https://www.figma.com/oauth/mcp",
+      "token_endpoint": "https://api.figma.com/v1/oauth/token",
+      "grant_types_supported": [
+        "authorization_code",
+        "refresh_token"
+      ],
+      "response_types_supported": [
+        "code"
+      ],
+      "registration_endpoint": "https://api.figma.com/v1/oauth/mcp/register",
+      "code_challenge_methods_supported": [
+        "S256"
+      ],
+      "scopes_supported": [
+        "mcp:connect"
+      ],
+      "require_state_parameter": true
+    }
+  },
+  {
+    "url": "https://mcp.figma.com/mcp/.well-known/oauth-authorization-server",
+    "status": 404,
+    "error": "Status 404: {\"status\":404,\"err\":\"Not found\"}"
+  },
+  {
+    "url": "https://figma.com/.well-known/oauth-authorization-server",
+    "status": 200,
+    "metadata": {
+      "issuer": "https://api.figma.com",
+      "authorization_endpoint": "https://www.figma.com/oauth/mcp",
+      "token_endpoint": "https://api.figma.com/v1/oauth/token",
+      "grant_types_supported": [
+        "authorization_code",
+        "refresh_token"
+      ],
+      "response_types_supported": [
+        "code"
+      ],
+      "registration_endpoint": "https://api.figma.com/v1/oauth/mcp/register",
+      "code_challenge_methods_supported": [
+        "S256"
+      ],
+      "scopes_supported": [
+        "mcp:connect"
+      ],
+      "require_state_parameter": true
+    }
+  }
+]

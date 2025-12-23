@@ -1,24 +1,25 @@
-import httpx
 import asyncio
-import sys
+import httpx
+import json
 
-async def check():
+async def check_api_endpoints():
+    base_url = "http://localhost:8001"
+    
+    # We need a valid token. Since I can't easily login, 
+    # I will try to call the preapproved-servers endpoint (which might be protected)
+    # Actually, let's checking the open endpoints first.
+    
+    print("Checking Preapproved Servers (if public)...")
     async with httpx.AsyncClient() as client:
         try:
-            resp = await client.get("http://localhost:8001/api/mcp/preapproved-servers")
-            data = resp.json()
-            
-            gh = next((s for s in data if s["server_name"] == "GitHub"), None)
-            if gh:
-                conf = gh.get("oauth_config", {})
-                cid = conf.get("client_id")
-                print(f"Server Name: {gh['server_name']}")
-                print(f"Client ID in response: {cid}")
-                print(f"Is Client ID None? {cid is None}")
+            resp = await client.get(f"{base_url}/api/mcp/preapproved-servers")
+            print(f"Status: {resp.status_code}")
+            if resp.status_code == 200:
+                print(f"Data: {json.dumps(resp.json(), indent=2)}")
             else:
-                print("GitHub not found")
+                print(f"Error: {resp.text}")
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"Request failed: {e}")
 
 if __name__ == "__main__":
-    asyncio.run(check())
+    asyncio.run(check_api_endpoints())
