@@ -97,6 +97,20 @@ async def read_mcp_settings(
     settings = result.scalars().all()
     return settings
 
+# Alias endpoint for frontend compatibility
+@router.get("/api/settings/mcp-servers", response_model=List[McpServerSettingRead])
+async def read_mcp_servers_alias(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(database.get_db)
+):
+    """
+    Alias for /api/mcp/settings/ - retrieves all MCP server settings for the authenticated user.
+    """
+    statement = select(McpServerSetting).where(McpServerSetting.user_id == current_user.id)
+    result = await db.execute(statement)
+    settings = result.scalars().all()
+    return settings
+
 # Route to update an MCP server setting
 @router.patch("/api/mcp/settings/{setting_id}", response_model=McpServerSettingRead)
 async def update_mcp_setting(
