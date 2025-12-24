@@ -1,6 +1,7 @@
 # ignore all files in the venv directory
 venv/
 .env
+__pycache__
 # Logs
 logs
 *.log
