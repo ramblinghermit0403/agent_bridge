@@ -91,7 +91,6 @@
               </div>
               <div class="setting-control">
                 <button @click="openConfigModal(setting)" class="form-button small-button">Configure</button>
-                <button @click="viewTools(setting)" class="form-button small-button">View Tools</button>
                 <button @click="deleteSetting(setting.id)" class="form-button small-button secondary-button">Delete</button>
                 <label class="toggle-switch" style="margin-left: 0.5rem;"><input type="checkbox" v-model="setting.is_active" @change="toggleSettingActive(setting)"><span class="slider"></span></label>
               </div>
@@ -820,13 +819,14 @@ onMounted(() => {
 }
 
 .form-button.secondary-button {
-  background-color: transparent;
+  background-color: var(--bg-secondary);
   border: 1px solid var(--border-color);
   color: var(--text-primary);
 }
 
 .form-button.secondary-button:hover {
   background-color: var(--hover-bg);
+  border-color: var(--text-secondary);
   opacity: 1;
 }
 

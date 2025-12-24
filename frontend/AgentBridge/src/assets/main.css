@@ -21,6 +21,8 @@
   --border-color: rgba(0, 0, 0, 0.1);
   --hover-bg: rgba(0, 0, 0, 0.05);
   --active-bg: rgba(0, 0, 0, 0.1);
+  --accent-color: #000000;
+  --accent-hover: #333333;
 }
 
 /* Dark Theme: White on Black */
@@ -34,6 +36,8 @@
   --border-color: rgba(255, 255, 255, 0.1);
   --hover-bg: rgba(255, 255, 255, 0.05);
   --active-bg: rgba(255, 255, 255, 0.1);
+  --accent-color: #FFFFFF;
+  --accent-hover: #CCCCCC;
 }
 
 /* Global Body Styles */
