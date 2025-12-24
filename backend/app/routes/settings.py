@@ -50,7 +50,7 @@ async def test_mcp_connection(request: McpConnectionTestRequest):
 @router.post("/api/mcp/settings/", response_model=McpServerSettingRead)
 async def create_mcp_setting(
     setting: McpServerSettingCreate,
-    current_user: User.User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(database.get_db)
 ):
     """
@@ -85,7 +85,7 @@ async def create_mcp_setting(
 # Route to get all MCP server settings for the current user
 @router.get("/api/mcp/settings/", response_model=List[McpServerSettingRead])
 async def read_mcp_settings(
-    current_user: User.User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(database.get_db)
 ):
     """
@@ -102,7 +102,7 @@ async def read_mcp_settings(
 async def update_mcp_setting(
     setting_id: int,
     setting_update: McpServerSettingUpdate,
-    current_user: User.User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(database.get_db)
 ):
     """
@@ -138,7 +138,7 @@ async def update_mcp_setting(
 @router.delete("/api/mcp/settings/{setting_id}")
 async def delete_mcp_setting(
     setting_id: int,
-    current_user: User.User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(database.get_db)
 ):
     """
@@ -185,7 +185,7 @@ async def get_preapproved_servers():
 @router.get("/api/mcp/settings/{setting_id}/tools")
 async def list_server_tools(
     setting_id: int,
-    current_user: User.User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(database.get_db)
 ):
     """
@@ -235,7 +235,7 @@ class UserOut(BaseModel):
 @router.put("/users/me", response_model=UserOut)
 async def update_user_me(
     user_update: UserUpdate,
-    current_user: User.User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(database.get_db)
 ):
     """
@@ -439,7 +439,7 @@ async def oauth_callback(code: str, state: str):
 async def finalize_oauth_flow(
     code: str, 
     state: str,
-    current_user: User.User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(database.get_db)
 ):
     print(f"DEBUG: Finalize called with code={code}, state={state}")

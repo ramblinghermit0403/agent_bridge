@@ -2,6 +2,7 @@
 from typing import Optional
 from sqlalchemy import Column, String, Integer, Boolean, UniqueConstraint,ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship
 from pydantic import BaseModel
 from datetime import datetime # You might need this for timestamps later if you add them
 from ..database import database
@@ -15,12 +16,15 @@ class McpServerSetting(database.Base):
     __tablename__ = "mcp_server_settings"
 
     id = Column(Integer, primary_key=True, index=True) # Added index for ID as well
-    user_id = user_id=Column(String,ForeignKey(User.User.id)) # Ensure user_id is not null
+    user_id = Column(String, ForeignKey("Users.id")) # Ensure user_id is not null
     server_name = Column(String, index=True, nullable=False)
     server_url = Column(String, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     description = Column(String, nullable=True)
     credentials = Column(String, nullable=True) # JSON string: {access_token, refresh_token, expiry, provider}
+
+    # Relationships
+    tool_permissions = relationship("ToolPermission", back_populates="server_setting", cascade="all, delete-orphan")
 
     # Adding a unique constraint for (user_id, server_name)
     # This ensures a user cannot have two settings with the same name.

@@ -33,7 +33,7 @@ import {
   faPen,
   faSyncAlt,
   faBolt
-// For the Save button
+  // For the Save button
 } from '@fortawesome/free-solid-svg-icons'
 
 /* add icons to the library */
@@ -45,9 +45,14 @@ app.component('ToasterVue', Toaster)
 app.component('FontAwesomeIcon', FontAwesomeIcon)
 app.use(ElementPlus)
 app.use(Toast, {
-  position: POSITION.TOP_RIGHT,
+  position: POSITION.BOTTOM_LEFT,
   timeout: 5000,
-  zIndex: 2147483647
+  zIndex: 2147483647,
+  toastClassName: 'custom-toast',
+  bodyClassName: 'custom-toast-body',
+  hideProgressBar: true,
+  closeButton: false,
+  icon: false
 })
 
 // Enable devtools in production

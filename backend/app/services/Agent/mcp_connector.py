@@ -106,10 +106,15 @@ class MCPConnector:
     async def run_tool(self, tool_name: str, parameters: dict):
         try:
             return await self._run_tool_sse(tool_name, parameters)
-        except Exception as e:
+        except (httpx.ConnectError, Exception) as e:
             logger.warning(f"SSE run_tool failed for {tool_name}: {e}. Trying Streamable HTTP...")
-            # Fallback
-            return await self._run_tool_streamable(tool_name, parameters)
+            try:
+                # Fallback to Streamable
+                return await self._run_tool_streamable(tool_name, parameters)
+            except (httpx.ConnectError, Exception) as e2:
+                logger.error(f"Tool execution failed for {tool_name} on {self.server_url}: {e2}")
+                # Return string error instead of raising to prevent agent crash
+                return f"Error: Could not connect to any MCP server at {self.server_url}. Please ensure the server is running. Details: {e2}"
 
     async def _run_tool_sse(self, tool_name: str, parameters: dict):
          async with sse_client(self.server_url, headers=self._headers) as (read_stream, write_stream):

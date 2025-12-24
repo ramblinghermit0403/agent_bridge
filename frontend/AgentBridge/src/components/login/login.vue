@@ -1,57 +1,99 @@
 <template>
-  <div class="auth-page-container">
-    <div class="auth-card">
-      
-      <!-- Header -->
-      <div class="auth-header">
-        <h1>AgentBridge</h1>
-        <p>{{ viewTitle }}</p>
+  <div class="auth-container">
+    <!-- Left Side: Branding -->
+    <div class="auth-brand">
+      <div class="brand-content">
+        <h1 class="brand-title">AgentBridge</h1>
+        <p class="brand-tagline">Connect. Orchestrate. Automate.</p>
+        <div class="brand-features">
+          <div class="feature-item">→ Multi-server orchestration</div>
+          <div class="feature-item">→ Natural language control</div>
+          <div class="feature-item">→ Unified tool access</div>
+        </div>
       </div>
-      
-      <!-- Success or Error Messages -->
-      <div v-if="message" :class="['message', isError ? 'error' : 'success']">
-        {{ message }}
-      </div>
+    </div>
 
-      <!-- Form container with transition -->
-      <transition name="form-swap" mode="out-in">
-        <!-- Login Form -->
-        <form v-if="isLoginView" @submit.prevent="handleLogin" class="auth-form" key="login">
-          <div class="form-group">
-            <label for="login-email">Email</label>
-            <input type="email" id="login-email" v-model="loginForm.email" required class="form-input">
-          </div>
-          <div class="form-group">
-            <label for="login-password">Password</label>
-            <input type="password" id="login-password" v-model="loginForm.password" required class="form-input">
-          </div>
-          <button type="submit" class="form-button">Sign In</button>
-        </form>
+    <!-- Right Side: Form -->
+    <div class="auth-form-container">
+      <div class="auth-form-wrapper">
+        <div class="form-header">
+          <h2>{{ isLoginView ? 'Welcome back' : 'Get started' }}</h2>
+          <p>{{ isLoginView ? 'Sign in to your account' : 'Create your account' }}</p>
+        </div>
 
-        <!-- Register Form -->
-        <form v-else @submit.prevent="handleRegister" class="auth-form" key="register">
-          <div class="form-group">
-            <label for="register-username">Username</label>
-            <input type="text" id="register-username" v-model="registerForm.username" required class="form-input">
-          </div>
-          <div class="form-group">
-            <label for="register-email">Email</label>
-            <input type="email" id="register-email" v-model="registerForm.email" required class="form-input">
-          </div>
-          <div class="form-group">
-            <label for="register-password">Password</label>
-            <input type="password" id="register-password" v-model="registerForm.password" required class="form-input">
-          </div>
-          <button type="submit" class="form-button">Create Account</button>
-        </form>
-      </transition>
-      
-      <!-- Link to switch between forms -->
-      <div class="form-switcher">
-        <span>{{ isLoginView ? "Don't have an account?" : "Already have an account?" }}</span>
-        <a href="#" @click.prevent="switchView">
-          {{ isLoginView ? 'Sign Up' : 'Sign In' }}
-        </a>
+        <transition name="form-fade" mode="out-in">
+          <!-- Login Form -->
+          <form v-if="isLoginView" @submit.prevent="handleLogin" class="form" key="login">
+            <div class="input-group">
+              <label for="login-email">Email</label>
+              <input 
+                type="email" 
+                id="login-email" 
+                v-model="loginForm.email" 
+                required 
+                class="input-field"
+                placeholder="you@example.com"
+              >
+            </div>
+            <div class="input-group">
+              <label for="login-password">Password</label>
+              <input 
+                type="password" 
+                id="login-password" 
+                v-model="loginForm.password" 
+                required 
+                class="input-field"
+                placeholder="••••••••"
+              >
+            </div>
+            <button type="submit" class="submit-btn">Sign In</button>
+          </form>
+
+          <!-- Register Form -->
+          <form v-else @submit.prevent="handleRegister" class="form" key="register">
+            <div class="input-group">
+              <label for="register-username">Username</label>
+              <input 
+                type="text" 
+                id="register-username" 
+                v-model="registerForm.username" 
+                required 
+                class="input-field"
+                placeholder="johndoe"
+              >
+            </div>
+            <div class="input-group">
+              <label for="register-email">Email</label>
+              <input 
+                type="email" 
+                id="register-email" 
+                v-model="registerForm.email" 
+                required 
+                class="input-field"
+                placeholder="you@example.com"
+              >
+            </div>
+            <div class="input-group">
+              <label for="register-password">Password</label>
+              <input 
+                type="password" 
+                id="register-password" 
+                v-model="registerForm.password" 
+                required 
+                class="input-field"
+                placeholder="••••••••"
+              >
+            </div>
+            <button type="submit" class="submit-btn">Create Account</button>
+          </form>
+        </transition>
+
+        <div class="form-footer">
+          <span>{{ isLoginView ? "Don't have an account?" : "Already have an account?" }}</span>
+          <button @click="switchView" class="switch-btn">
+            {{ isLoginView ? 'Sign Up' : 'Sign In' }}
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -59,23 +101,21 @@
 
 
 <script setup>
-import { ref, reactive, computed } from 'vue';
+import { ref, reactive, computed } from 'vue'; // Restored imports
 import { useRouter } from 'vue-router';
+import { useToast } from 'vue-toastification';
 
 const router = useRouter();
+const toast = useToast();
 const loginForm = reactive({ email: '', password: '' });
 const registerForm = reactive({ username: '', email: '', password: '' });
 const isLoginView = ref(true);
-const message = ref('');
-const isError = ref(false);
 const api_url = import.meta.env.VITE_API_URL || 'http://localhost:8001';
 
 const viewTitle = computed(() => isLoginView.value ? 'Sign in to your account' : 'Create a new account');
 
 const switchView = () => {
   isLoginView.value = !isLoginView.value;
-  message.value = '';
-  isError.value = false;
 };
 
 // --- NEW HELPER FUNCTION TO FETCH USER DETAILS ---
@@ -104,8 +144,6 @@ const fetchUserDetails = async (token) => {
 };
 
 const handleLogin = async () => {
-  message.value = 'Signing in...';
-  isError.value = false;
   const formData = new URLSearchParams();
   formData.append('username', loginForm.email);
   formData.append('password', loginForm.password);
@@ -127,25 +165,20 @@ const handleLogin = async () => {
     localStorage.setItem('token', token);
 
     // Step 2: Use the new token to fetch user details
-    message.value = 'Fetching user details...';
     await fetchUserDetails(token);
     
     // Step 3: Redirect
-    message.value = 'Success! Redirecting...';
-    setTimeout(() => router.push('/agent'), 1000);
+    toast.success('Successfully logged in!');
+    router.push('/agent');
 
   } catch (error) {
-    message.value = error.message;
-    isError.value = true;
+    toast.error(error.message);
     localStorage.removeItem('token');
     localStorage.removeItem('user');
   }
 };
 
 const handleRegister = async () => {
-  // Unchanged from previous version
-  message.value = 'Creating account...';
-  isError.value = false;
   const payload = { username: registerForm.username, email: registerForm.email, password: registerForm.password };
   
   const token = localStorage.getItem('token');
@@ -162,8 +195,7 @@ const handleRegister = async () => {
     });
     const data = await response.json();
     if (response.ok) {
-      message.value = data.message || 'Registration successful! Please sign in.';
-      isError.value = false;
+      toast.success(data.message || 'Registration successful! Please sign in.');
       setTimeout(() => {
         switchView();
         registerForm.username = '';
@@ -174,168 +206,218 @@ const handleRegister = async () => {
       throw new Error(data.detail || 'Registration failed.');
     }
   } catch (error) {
-    message.value = error.message;
-    isError.value = true;
+    toast.error(error.message);
   }
 };
 </script>
 
 <style scoped>
-.auth-page-container {
+/* Minimal Split-Screen Auth Layout */
+.auth-container {
+  display: flex;
+  min-height: 100vh;
+  background-color: var(--bg-primary);
+}
+
+/* Left Side: Brand */
+.auth-brand {
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 100vh;
-  padding: 2rem;
-  background-color: var(--bg-primary, #f9fafb);
-  font-family: var(--font-sans, 'Segoe UI', sans-serif);
-  color: var(--text-primary, #111827);
-  animation: fadeIn 0.5s ease-out;
+  background-color: var(--text-primary);
+  color: var(--bg-primary);
+  padding: 3rem;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+.brand-content {
+  max-width: 500px;
 }
 
-.auth-card {
-  position: relative;
-  width: 100%;
-  max-width: 420px;
-  padding: 2.5rem 2rem;
-  background-color: var(--bg-secondary, #ffffff);
-  border: 1px solid var(--border-color, #e5e7eb);
-  border-radius: 16px;
-  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
+.brand-title {
+  font-size: 3.5rem;
+  font-weight: 700;
+  margin: 0 0 1rem 0;
+  letter-spacing: -0.02em;
 }
 
-.auth-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 4px;
-  background: linear-gradient(90deg, transparent, var(--accent-color, #3b82f6), transparent);
+.brand-tagline {
+  font-size: 1.25rem;
+  margin: 0 0 3rem 0;
   opacity: 0.8;
 }
 
-.auth-header {
-  text-align: center;
-  margin-bottom: 2rem;
+.brand-features {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
-.auth-header h1 {
+
+.feature-item {
+  font-size: 1rem;
+  opacity: 0.7;
+  font-family: 'Courier New', monospace;
+}
+
+/* Right Side: Form */
+.auth-form-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+  background-color: var(--bg-primary);
+}
+
+.auth-form-wrapper {
+  width: 100%;
+  max-width: 400px;
+}
+
+.form-header {
+  margin-bottom: 3rem;
+}
+
+.form-header h2 {
   font-size: 2rem;
   font-weight: 700;
-  color: var(--text-primary, #111827);
-}
-.auth-header p {
-  font-size: 1rem;
-  color: var(--text-secondary, #6b7280);
+  margin: 0 0 0.5rem 0;
+  color: var(--text-primary);
 }
 
-.message {
-  padding: 0.75rem 1rem;
-  margin-bottom: 1.5rem;
-  border-radius: 8px;
-  text-align: center;
-  font-weight: 500;
-  font-size: 0.9rem;
-}
-.message.success {
-  background-color: #dcfce7;
-  color: #15803d;
-  border: 1px solid #bbf7d0;
-}
-.message.error {
-  background-color: #fee2e2;
-  color: #b91c1c;
-  border: 1px solid #fecaca;
+.form-header p {
+  font-size: 0.95rem;
+  margin: 0;
+  color: var(--text-secondary);
 }
 
-.auth-form {
+/* Form Styles */
+.form {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 1.5rem;
 }
 
-.form-group {
+.input-group {
   display: flex;
   flex-direction: column;
+  gap: 0.5rem;
 }
-.form-group label {
+
+.input-group label {
   font-size: 0.875rem;
   font-weight: 500;
-  color: var(--text-secondary, #6b7280);
-  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
-.form-input {
+
+.input-field {
   width: 100%;
-  padding: 0.75rem 1rem;
-  background-color: var(--bg-secondary, #fff);
-  border: 1px solid var(--border-color, #d1d5db);
-  border-radius: 8px;
-  color: var(--text-primary, #111827);
-  font-size: 1rem;
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-.form-input:hover {
-  border-color: #9ca3af;
-}
-.form-input:focus {
-  outline: none;
-  border-color: var(--accent-color, #3b82f6);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
-}
-
-.form-button {
-  padding: 0.8rem;
-  margin-top: 0.5rem;
-  font-weight: 600;
-  font-size: 1rem;
-  color: white;
-  background-color: var(--accent-color, #3b82f6);
+  padding: 0.75rem 0;
+  background: transparent;
   border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s ease-out;
-}
-.form-button:hover {
-  background-color: var(--accent-hover, #2563eb);
-  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.25);
-}
-.form-button:disabled {
-  background-color: #a5b4fc;
-  cursor: not-allowed;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-family: var(--font-sans);
+  transition: border-color var(--transition-speed) var(--transition-ease);
 }
 
-.form-switcher {
-  text-align: center;
-  margin-top: 2rem;
-  font-size: 0.9rem;
-  color: var(--text-secondary, #6b7280);
+.input-field::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.5;
 }
-.form-switcher a {
+
+.input-field:focus {
+  outline: none;
+  border-bottom-color: var(--text-primary);
+}
+
+.submit-btn {
+  margin-top: 1rem;
+  padding: 1rem;
+  background-color: var(--text-primary);
+  color: var(--bg-primary);
+  border: none;
+  font-size: 1rem;
   font-weight: 600;
-  color: var(--accent-color, #3b82f6);
-  text-decoration: none;
-  margin-left: 0.35rem;
-}
-.form-switcher a:hover {
-  text-decoration: underline;
+  cursor: pointer;
+  transition: opacity var(--transition-speed) var(--transition-ease);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
-.form-swap-enter-active,
-.form-swap-leave-active {
+.submit-btn:hover {
+  opacity: 0.9;
+}
+
+.submit-btn:active {
+  opacity: 0.8;
+}
+
+/* Form Footer */
+.form-footer {
+  margin-top: 2rem;
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.switch-btn {
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  margin-left: 0.5rem;
+  font-size: 0.875rem;
+  transition: opacity var(--transition-speed) var(--transition-ease);
+}
+
+.switch-btn:hover {
+  opacity: 0.7;
+}
+
+/* Form Transition */
+.form-fade-enter-active,
+.form-fade-leave-active {
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
-.form-swap-enter-from { opacity: 0; transform: translateY(10px); }
-.form-swap-leave-to { opacity: 0; transform: translateY(-10px); }
 
-@media (max-width: 480px) {
-  .auth-card {
-    padding: 2rem 1.25rem;
+.form-fade-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.form-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .auth-container {
+    flex-direction: column;
+  }
+
+  .auth-brand {
+    min-height: 40vh;
+    padding: 2rem;
+  }
+
+  .brand-title {
+    font-size: 2.5rem;
+  }
+
+  .brand-tagline {
+    font-size: 1rem;
+  }
+
+  .auth-form-container {
+    padding: 2rem;
   }
 }
 </style>
+

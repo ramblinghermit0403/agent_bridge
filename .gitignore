@@ -1,3 +1,6 @@
+# ignore all files in the venv directory
+venv/
+.env
 # Logs
 logs
 *.log

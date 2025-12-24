@@ -34,6 +34,10 @@ const routes = [
     component: dashboard, // The dashboard component acts as the layout/wrapper
     // meta: { requiresAuth: true }, // Uncomment if the entire dashboard requires auth
     children: [
+      {
+        path: 'dashboard',
+        redirect: '/agent'
+      },
       // The /agent route, which is now the default child of the main layout
       { path: 'agent', component: AIagent, name: 'AIagent' },
       // Other routes within the dashboard layout

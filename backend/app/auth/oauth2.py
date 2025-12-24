@@ -38,7 +38,7 @@ async def get_current_user(
         raise credentials_exception
     
     result = await db.execute(
-        select(User.User).filter(User.User.email == email)
+        select(User).filter(User.email == email)
     )
     user = result.scalars().first()
     
@@ -48,7 +48,7 @@ async def get_current_user(
     return user
 
 @router.get("/user")
-async def get_user_info(current_user: User.User = Depends(get_current_user)):
+async def get_user_info(current_user: User = Depends(get_current_user)):
     return {
         "email": current_user.email,
         "name": current_user.username

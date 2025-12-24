@@ -7,13 +7,12 @@ from functools import lru_cache
 
 # --- LangChain Imports ---
 from langchain_core.tools import tool
-from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.runnables import RunnableLambda
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import SystemMessage, AIMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.agents import create_tool_calling_agent, AgentExecutor
+from langchain.agents import create_tool_calling_agent, create_react_agent, AgentExecutor
 from langchain.tools import StructuredTool
 
 # --- Pydantic Imports ---
@@ -22,7 +21,6 @@ from pydantic import create_model, BaseModel, Field
 from langchain_community.chat_message_histories import RedisChatMessageHistory
 
 # --- Your Project's Local Imports ---
-from .rag_setup import setup_rag_retriever
 from .mcp_connector import MCPConnector
 
 import logging
@@ -39,6 +37,7 @@ import langchain_google_genai.chat_models
 from typing import Any, List, Optional, cast, Dict
 from langchain_core.messages import AIMessage, AIMessageChunk
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
+from langchain.tools.render import render_text_description
 
 # Conditionally import UsageMetadata and subtract_usage
 try:
@@ -198,11 +197,12 @@ logger.info("Monkeypatched langchain_google_genai.chat_models._response_to_resul
 
 # --- STEP 1: DEFINE THE PROMPTS (Unchanged) ---
 
-def build_agent_prompt():
+def build_agent_prompt(model_provider: str = "gemini"):
     """
     Builds a prompt for an agent that knows how to use
     both specific tools and a general knowledge base.
     """
+    # Universal system prompt for all models
     system_prompt = (
         "You are an expert assistant. Your goal is to answer a user's question accurately and concisely.\n"
         "You have access to a set of specialized tools for specific, structured tasks (like checking a server status).\n"
@@ -235,21 +235,130 @@ def build_formatter_prompt():
         "6. Do not add any new facts, strictly format the provided text."
     )
     return ChatPromptTemplate.from_messages([
-        ("system", system_prompt),
-        ("user", "Original Question: {question}\n\nPlain Text Answer:\n{answer}")
-    ])
+        SystemMessage(content=system_prompt),
+        ("user", "Question: {question}\nAnswer: {answer}\nFormat this answer as HTML:"),
+    ]) 
+
+def build_react_prompt():
+    """
+    Builds a ReAct-style prompt for models that don't support native tool calling well.
+    """
+    system_prompt = (
+        "You are an expert assistant. Answer the following questions as best you can. "
+        "You are designed to solving tasks using a specific Reason+Act (ReAct) process.\n\n"
+        
+        "You have access to the following tools:\n\n"
+        "{tools}\n\n"
+        
+        "Use the following format strictly:\n\n"
+        "Question: the input question you must answer\n"
+        "Thought: you should always think about what to do\n"
+        "Action: the action to take, should be one of [{tool_names}]\n"
+        "Action Input: the input to the action (must be a valid string or JSON)\n"
+        "Observation: the result of the action\n"
+        "... (this Thought/Action/Action Input/Observation can repeat N times)\n"
+        "Thought: I now know the final answer\n"
+        "Final Answer: the final answer to the original input question\n\n"
+        
+        "IMPORTANT RULES:\n"
+        "1. You MUST use the exact headers: 'Thought:', 'Action:', 'Action Input:'. Do NOT bold them or change case.\n"
+        "2. The 'Action' must be the EXACT name of a tool from the list.\n"
+        "3. 'Action Input' MUST be a JSON object `{\"arg\": \"value\"}`. Do NOT send a plain string unless the tool takes exactly one argument.\n"
+        "4. Output 'Observation:' ONLY if you are simulating a result (you usually wait for the system to provide it).\n"
+        "5. If you receive an 'Invalid Format' observation, it means you forgot the 'Action:' or 'Action Input:' header. Retry immediately with correct formatting.\n"
+        "6. Ensure there is a newline before 'Observation:'.\n\n"
+        
+        "EXAMPLE:\n"
+        "Question: Check weather in SF\n"
+        "Thought: I need to use check_weather.\n"
+        "Action: check_weather\n"
+        "Action Input: {\"location\": \"San Francisco\"}\n"
+        "Observation: Sunny, 22C\n"
+        "Thought: It is sunny.\n"
+        "Final Answer: Sunny, 22C\n\n"
+        
+        "Begin!"
+    )
+    return ChatPromptTemplate.from_messages([
+        SystemMessage(content=system_prompt),
+        MessagesPlaceholder(variable_name="chat_history"),
+        ("user", "{input}\n\n{agent_scratchpad}"),
+    ]) 
+
+# ... (omitted)
+
+# Duplicate create_final_agent_pipeline removed to use the correct implementation below
+
 
 
 # --- STEP 2: TOOL-BUILDING LOGIC ---
 
-def create_tool_func(tool_name: str, connector, pydantic_model=None):
+def create_tool_func(tool_name: str, connector, pydantic_model=None, user_id: str=None, unique_tool_name: str=None):
     """
     Creates the asynchronous and synchronous functions that the LangChain tool will wrap.
-    The `pydantic_model` argument is for context but isn't used here, as the validation
-    happens before this function is ever called.
+    Includes permission checking logic.
     """
-    async def async_func(**kwargs):
-        # kwargs will be a validated dictionary of arguments from the tool call
+    async def async_func(*args, **kwargs):
+        # Handle positional argument if passed (sometimes happens with single-input tools)
+        if args:
+            if len(args) == 1 and isinstance(args[0], dict):
+                kwargs.update(args[0])
+            elif len(args) == 1 and isinstance(args[0], str):
+                 # Try to parse string as JSON if it looks like a dict
+                 import json
+                 arg_str = args[0].strip()
+                 if arg_str.startswith("{") and arg_str.endswith("}"):
+                     try:
+                         parsed_kwargs = json.loads(arg_str)
+                         if isinstance(parsed_kwargs, dict):
+                             kwargs.update(parsed_kwargs)
+                     except json.JSONDecodeError:
+                         pass # Not valid JSON, treat as standard string arg
+        
+        # 1. Check permissions if user_id is provided
+        if user_id:
+            from app.services.tool_permissions_helper import check_tool_approval, PendingApproval
+            from sqlalchemy.ext.asyncio import AsyncSession
+            
+            # Create a fresh async session for the check
+            # We can't reuse the request dependency session here easily as it's not passed down
+            # But we can create a new one.
+            from app.database.database import AsyncSessionLocal
+            
+            async with AsyncSessionLocal() as db:
+                needs_approval, approval_type = await check_tool_approval(db, user_id, tool_name)
+                
+                if needs_approval and approval_type != 'always':
+                    # Logic to block and wait for approval
+                    # Use unique_tool_name for PendingApproval SO THAT agent.py can find it (it sees unique name in event)
+                    approval_name = unique_tool_name if unique_tool_name else tool_name
+                    
+                    approval_id = PendingApproval.create(
+                        user_id=user_id,
+                        tool_name=approval_name, 
+                        server_name="unknown", # We can improve this later
+                        tool_input=kwargs
+                    )
+                    
+                    logger.info(f"Blocking tool {approval_name} (raw: {tool_name}) for approval {approval_id}")
+                    
+                    try:
+                        # Wait for approval
+                        approved = False
+                        for _ in range(60): # 60 seconds timeout
+                            await asyncio.sleep(1)
+                            pending = PendingApproval.get(approval_id)
+                            # Check if approved changed from None to True/False
+                            if pending and pending['approved'] is not None:
+                                approved = pending['approved']
+                                break
+                        
+                        if not approved:
+                            raise ToolException(f"Tool execution denied for {tool_name}")
+                    finally:
+                        PendingApproval.remove(approval_id)
+
+        # 2. Execute tool
         return await connector.run_tool(tool_name, kwargs)
     
     def sync_func(**kwargs):
@@ -264,7 +373,10 @@ def create_tool_func(tool_name: str, connector, pydantic_model=None):
         
     return sync_func, async_func
 
-async def build_tools_from_servers(user_mcp_servers: Dict[str, Dict[str, Any]]) -> List[StructuredTool]:
+class ToolException(Exception):
+    pass
+
+async def build_tools_from_servers(user_mcp_servers: Dict[str, Dict[str, Any]], user_id: str = None) -> List[StructuredTool]:
     """
     Builds LangChain tools from a user-specific server dictionary.
     This function is now called on every request with the current user's data.
@@ -319,7 +431,7 @@ async def build_tools_from_servers(user_mcp_servers: Dict[str, Dict[str, Any]]) 
                 unique_tool_name = f"{server_name.replace(' ', '')}_{tool_name}"
                 full_description = f"{description} This tool is from the '{server_name}' server."
 
-                sync_func, async_func = create_tool_func(tool_name, connector, pydantic_model)
+                sync_func, async_func = create_tool_func(tool_name, connector, pydantic_model, user_id=user_id, unique_tool_name=unique_tool_name)
                 tool_instance = StructuredTool.from_function(
                     func=sync_func, 
                     coroutine=async_func, 
@@ -344,60 +456,60 @@ def get_session_memory(session_id: str) -> RedisChatMessageHistory:
 
 # --- STEP 4: THE ROBUST, PER-REQUEST PIPELINE FACTORY ---
 
-@lru_cache(maxsize=None)
-def get_llm():
-    """Returns a cached instance of the LLM."""
-    logger.info("--- Creating new ChatGoogleGenerativeAI instance (should happen only once per worker) ---")
-    return ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
-        google_api_key=os.getenv("GOOGLE_API_KEY"),
-        temperature=0
-    )
+from langchain_aws import ChatBedrockConverse
 
-@lru_cache(maxsize=None)
-def get_knowledge_tool():
-    """Returns a cached instance of the RAG-based knowledge tool."""
-    logger.info("--- Creating new RAG knowledge tool (should happen only once per worker) ---")
-    llm = get_llm()
-    rag_retriever = setup_rag_retriever()
-    rag_prompt = ChatPromptTemplate.from_template(
-        "Answer the user's question based only on the following context:\n\n{context}\n\nQuestion: {input}"
-    )
-    document_chain = create_stuff_documents_chain(llm, rag_prompt)
+@lru_cache(maxsize=16) # Reduced maxsize just in case, though clients are small
+def get_llm(model_provider: str = "gemini", model_name: str = "gemini-2.5-flash", region_name: str = None):
+    """Returns a cached instance of the LLM based on provider."""
     
-    @tool
-    async def search_knowledge_base(input: str) -> str:
-        """
-        Searches the company's knowledge base for answers to general questions, 
-        policies, or other unstructured information. Use this when no other
-        specialized tool is suitable.
-        """
-        logger.info(f"Using search_knowledge_base for: {input}")
-        retrieved_docs = await rag_retriever.ainvoke(input)
-        response = await document_chain.ainvoke({
-            "input": input,
-            "context": retrieved_docs
-        })
-        return response
-    return search_knowledge_base
+    # Use configured region if not specified
+    if not region_name:
+        region_name = os.getenv("AWS_REGION", "us-east-1")
+    
+    if model_provider == "bedrock":
+        logger.info(f"--- Creating ChatBedrockConverse instance: {model_name} in {region_name} ---")
+        return ChatBedrockConverse(
+            model=model_name,
+            region_name=region_name,
+            # credentials are auto-loaded from env AWS_ACCESS_KEY_ID etc by boto3
+            temperature=0,
+            disable_streaming=True # streaming tool calls causing issues with Nova models
+        )
+    else:
+        # Default to Gemini
+        logger.info(f"--- Creating ChatGoogleGenerativeAI instance: {model_name} ---")
+        return ChatGoogleGenerativeAI(
+            model=model_name,
+            google_api_key=os.getenv("GOOGLE_API_KEY"),
+            temperature=0
+        )
 
-async def create_final_agent_pipeline(user_mcp_servers: Dict[str, Any]) -> AgentExecutor:
+
+async def create_final_agent_pipeline(
+    user_mcp_servers: Dict[str, Any], 
+    user_id: str = None,
+    model_provider: str = "gemini",
+    model_name: str = "gemini-2.5-flash"
+) -> AgentExecutor:
     """
     Creates a user-specific AgentExecutor pipeline on-demand.
     It reuses cached components (LLM, RAG tool) and builds fresh user-specific tools.
     """
-    llm = get_llm()
-    knowledge_tool = get_knowledge_tool()
+    llm = get_llm(model_provider, model_name)
+    # knowledge_tool = get_knowledge_tool()
 
-    specialized_tools = await build_tools_from_servers(user_mcp_servers)
+    specialized_tools = await build_tools_from_servers(user_mcp_servers, user_id=user_id)
     
     
-    # all_tools = specialized_tools + [knowledge_tool]
     all_tools = specialized_tools  # Disabled knowledge base as per user request
     logger.info(f"Agent created with {len(all_tools)} tools: {[t.name for t in all_tools]}")
 
-    agent_prompt = build_agent_prompt()
+    # Unified Agent Creation: Use Tool Calling Agent for ALL models.
+    # We rely on ChatBedrockConverse with disable_streaming=True for Nova Pro stability.
+    agent_prompt = build_agent_prompt(model_provider)
+    
     agent = create_tool_calling_agent(llm=llm, tools=all_tools, prompt=agent_prompt)
-    agent_executor = AgentExecutor(agent=agent, tools=all_tools, verbose=True)
+        
+    agent_executor = AgentExecutor(agent=agent, tools=all_tools, verbose=True, handle_parsing_errors=True)
     
     return agent_executor

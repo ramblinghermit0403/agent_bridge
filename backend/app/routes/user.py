@@ -48,7 +48,7 @@ async def new_user(
             email: str = payload.get("sub")
             if email:
                 # Find the user
-                res = await db.execute(select(User.User).filter(User.User.email == email))
+                res = await db.execute(select(User).filter(User.email == email))
                 found_user = res.scalars().first()
                 if found_user and found_user.is_guest:
                     current_guest_user = found_user
@@ -64,7 +64,7 @@ async def new_user(
         
         # Check if real email already exists
         result = await db.execute(
-            select(User.User).filter(User.User.email == body.email)
+            select(User).filter(User.email == body.email)
         )
         existing_real_user = result.scalars().first()
         if existing_real_user:
@@ -88,8 +88,8 @@ async def new_user(
     
     # Check for existing user
     result = await db.execute(
-        select(User.User).filter(
-            (User.User.email == body.email) 
+        select(User).filter(
+            (User.email == body.email) 
         )
     )
     existing_user = result.scalars().first()
@@ -102,7 +102,7 @@ async def new_user(
     
     # Create a new user
     api_key = secrets.token_hex(32)
-    registeruser = User.User( 
+    registeruser = User( 
         id=str(uuid.uuid4()),
         username=body.username,
         email=body.email,

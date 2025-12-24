@@ -50,7 +50,7 @@ router = APIRouter()
 async def login(request: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(database.get_db)):
     # Find the user by email
     result = await db.execute(
-        select(User.User).filter(User.User.email == request.username)
+        select(User).filter(User.email == request.username)
     )
     user = result.scalars().first()
 
@@ -74,7 +74,7 @@ async def login_guest(db: AsyncSession = Depends(database.get_db)):
     guest_email = f"guest_{guest_uuid}@brainvault.app"
     
     # Create guest user
-    new_guest = User.User(
+    new_guest = User(
         id=guest_uuid,
         username="Guest User",
         email=guest_email,

@@ -23,10 +23,13 @@ from ..services.redis import crud_redis
 from ..database import database
 from ..auth.oauth2 import get_current_user
 from ..models import User
+from ..services.tool_permissions_helper import check_tool_permission, check_tool_approval, PendingApproval
+import asyncio
 
 # --- MODIFIED: Import the parameterized agent factory, not the global one ---
-from ..services.Agent.langchain_agent import get_session_memory, build_formatter_prompt, create_final_agent_pipeline
-
+# --- MODIFIED: Import the parameterized agent factory, not the global one ---
+from ..services.Agent.langchain_agent import get_session_memory, build_formatter_prompt, get_llm
+from ..services.agent_manager import get_or_create_agent
 # --- NEW: Import for fetching user-specific data ---
 
 
@@ -59,8 +62,8 @@ async def ask_agent_stream(
     token: str = Query(...),
     prompt: str = Query(..., min_length=1),
     session_id: Optional[str] = Query(None),
-    # REMOVED: No longer depends on a global agent state
-    # agent_executor: AgentExecutor = Depends(get_agent_from_state),
+    model_provider: str = Query("gemini"), # new param
+    model: str = Query("gemini-2.5-flash"), # new param, renamed from model_name for cleaner URL
     db: AsyncSession = Depends(database.get_db),
 ) -> EventSourceResponse:
     """
@@ -75,15 +78,6 @@ async def ask_agent_stream(
     # 1. Fetch this user's specific server configurations from the database.
     user_servers = await crud_redis.get_user_servers(db, user_id=current_user.id)
     
-    # 2. Create a new, user-specific agent executor for this single request.
-    try:
-        # This function must now be parameterized to accept user_servers
-        agent_executor = await create_final_agent_pipeline(user_mcp_servers=user_servers)
-    except Exception as e:
-        logger.error(f"Failed to create agent pipeline for user {current_user.id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Could not initialize the agent.")
-    # --- END NEW ---
-
     # The rest of your code works as-is, now using the locally created `agent_executor`
     actual_session_id = session_id or str(uuid.uuid4())
     user_id = current_user.id
@@ -102,16 +96,40 @@ async def ask_agent_stream(
     chat_history = await memory.aget_messages()
         
     formatter_prompt = build_formatter_prompt()
-    llm_formatter = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key=os.getenv("GOOGLE_API_KEY"), temperature=0)
+    # Note: Formatter should ideally reuse the same LLM or a lightweight one. 
+    # Note: Formatter should reuse the same LLM to respect user choice and avoid quota issues.
+    llm_formatter = get_llm(model_provider=model_provider, model_name=model)
     formatter_chain = formatter_prompt | llm_formatter | StrOutputParser()
-
-
 
     async def event_generator() -> AsyncGenerator[dict, None]:
         plain_text_answer = ""
         scratchpad_for_saving = []
 
         try:
+            # 2. Get cached or create new agent
+            try:
+                # Notify user that we are checking/building agent
+                start_msg = f"Initializing agent pipeline with {model}..."
+                yield {"event": "scratchpad", "data": json.dumps({'type': 'agent_status', 'content': start_msg})}
+                
+                agent_executor, is_cache_hit = await get_or_create_agent(
+                    user_id=current_user.id, 
+                    user_servers=user_servers,
+                    model_provider=model_provider,
+                    model_name=model
+                )
+                
+                if not is_cache_hit:
+                     # It was a cold start, inform user it finished
+                     yield {"event": "scratchpad", "data": json.dumps({'type': 'agent_status', 'content': "Agent initialized (Cold Start complete)."})}
+            except Exception as e:
+                 logger.error(f"Failed to create agent pipeline for user {current_user.id}: {e}", exc_info=True)
+                 yield {"event": "error", "data": json.dumps({'type': 'error', 'message': "Could not initialize the agent."})}
+                 return
+
+            if not is_cache_hit:
+                 yield {"event": "scratchpad", "data": json.dumps({'type': 'agent_status', 'content': "Agent initialized (Cold Start complete)."})}
+
             # Combine 'input' and 'chat_history' into a single dictionary
             agent_input = {"input": prompt, "chat_history": chat_history}
 
@@ -125,7 +143,75 @@ async def ask_agent_stream(
                 
                 if event_type == "on_tool_start":
                     tool_name = event['name']
-                    tool_input = event['data']['input']
+                    tool_input = event['data'].get("input", {})
+                    
+                    # Check if tool is enabled for this user
+                    # Note: We'd need server_id here, which requires tracking which server the tool belongs to
+                    # For now, we'll check approval only
+                    
+                    # Check if user has approval for this tool
+                    needs_approval, approval_type = await check_tool_approval(db, user_id, tool_name)
+                    
+                    if needs_approval and approval_type != 'always':
+
+                        # Create pending approval request (redundant if tool does it, but safer for UI consistency)
+                        # Actually, if tool does it, we should just read it or let the tool created it.
+                        # But tool creation is async inside the executor.
+                        # The tool might have ALREADY created it or is about to.
+                        # We can just send the signal. The tool blocks until approved.
+                        
+                        # We'll use a unique ID based on the tool call event to match if needed, 
+                        # but check_tool_approval just checks DB.
+                        
+                        # Wait a tiny bit for the tool to create the pending record if it hasn't?
+                        # Or we can create it here as well? 
+                        # If we create it here, we need to ensure the tool uses the same ID or just checks for ANY pending.
+                        # The tool logic we added checks PendingApproval.create() -> returns ID.
+                        
+                        # PROBLEM: We need the ID to send to frontend.
+                        # But the tool generates the ID.
+                        # We can't easily get the ID generated inside the tool unless we share state better.
+                        
+                        # WORKAROUND: We will assume the tool logic we added is authoritative.
+                        # But we need to tell the frontend "Hey, approval required".
+                        # And we need the approval_id.
+                        
+                        # The tool logic:
+                        # approval_id = PendingApproval.create(...)
+                        
+                        # We can poll PendingApproval for an entry matching this user/tool/input?
+                        # Or we can just create it here, and modify tool logic to use existing?
+                        
+                        # Modified strategy: Let agent.py create it (as it did before), 
+                        # AND update the tool logic in langchain_agent.py to CHECK for existing pending instead of creating new?
+                        
+                        # Or simpler: The tool creates it. We poll for it here?
+                        
+                        # Let's poll for it.
+                        approval_id = None
+                        for _ in range(100): # Wait up to 10s for tool to register it
+                           # Implementation detail: PendingApproval doesn't allow searching by content easily.
+                           # But we can iterate _pending.
+                           for pid, data in PendingApproval._pending.items():
+                               if data['user_id'] == user_id and data['tool_name'] == tool_name and data['approved'] is None:
+                                   approval_id = pid
+                                   break
+                           if approval_id: 
+                               break
+                           await asyncio.sleep(0.1)
+                        
+                        if approval_id:
+                            yield {"event": "tool_approval_required", "data": json.dumps({
+                                'type': 'tool_approval_required',
+                                'approval_id': approval_id,
+                                'tool_name': tool_name,
+                                'server_name': 'unknown',
+                                'payload': tool_input
+                            })}
+                        else:
+                             # Fallback if tool didn't registers it (e.g. error or logic mismatch)
+                             pass
+                    
                     thought = f"Tool Used: {tool_name} with input {json.dumps(tool_input)}"
                     scratchpad_for_saving.append(thought)
                     yield {"event": "scratchpad", "data": json.dumps({'type': 'tool_start', 'tool_name': tool_name, 'tool_input': tool_input})}

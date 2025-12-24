@@ -8,8 +8,10 @@
 <script setup>
 import { onMounted } from 'vue';
 import { useRoute } from 'vue-router';
+import { useToast } from 'vue-toastification';
 
 const route = useRoute();
+const toast = useToast();
 
 onMounted(() => {
   const code = route.query.code;
@@ -18,12 +20,15 @@ onMounted(() => {
   if (window.opener) {
     if (code && state) {
       window.opener.postMessage({ type: 'oauth-callback', code, state }, '*');
+      toast.success('Authenticated successfully. Closing...');
     } else {
         window.opener.postMessage({ type: 'oauth-error', error: 'No code returned' }, '*');
+        toast.error('Authentication failed: No code returned.');
     }
-    window.close();
+    setTimeout(() => window.close(), 1500);
   } else {
       console.error("No opener window found. Cannot complete auth.");
+      toast.error('Authentication error: Original window not found.');
   }
 });
 </script>

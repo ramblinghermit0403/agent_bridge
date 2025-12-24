@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Request
 import nest_asyncio
-from .routes import agent,auth,user,settings
+from .routes import agent,auth,user,settings,tool_permissions,tool_execution
 from fastapi.middleware.cors import CORSMiddleware
 from .database import database
 from contextlib import asynccontextmanager
@@ -54,6 +54,8 @@ app.include_router(agent.router)
 app.include_router(auth.router, prefix="/auth")
 app.include_router(user.router)
 app.include_router(settings.router)
+app.include_router(tool_permissions.router)
+app.include_router(tool_execution.router)
 
 
 # CORS middleware configuration

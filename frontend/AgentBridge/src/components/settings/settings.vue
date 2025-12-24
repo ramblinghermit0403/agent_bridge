@@ -22,9 +22,7 @@
       <main class="settings-content">
         <!-- ==== UPDATED PROFILE SECTION ==== -->
         <div v-if="activeCategory === 'profile'" class="settings-group">
-          <div v-if="profileMessage" :class="['message', isProfileError ? 'error' : 'success']">
-            {{ profileMessage }}
-          </div>
+
           <div class="setting-item">
             <div class="setting-info">
               <label for="userName">Username</label>
@@ -92,9 +90,9 @@
                 <p v-if="setting.description" class="setting-description small-text">{{ setting.description }}</p>
               </div>
               <div class="setting-control">
-                <button @click="editSetting(setting)" class="form-button small-button">Edit</button>
-                <button @click="deleteSetting(setting.id)" class="form-button small-button delete-button">Disconnect</button>
-                <button @click="viewTools(setting)" class="form-button small-button secondary-button" style="margin-left: 0.5rem;">View Tools</button>
+                <button @click="openConfigModal(setting)" class="form-button small-button">Configure</button>
+                <button @click="viewTools(setting)" class="form-button small-button">View Tools</button>
+                <button @click="deleteSetting(setting.id)" class="form-button small-button secondary-button">Delete</button>
                 <label class="toggle-switch" style="margin-left: 0.5rem;"><input type="checkbox" v-model="setting.is_active" @change="toggleSettingActive(setting)"><span class="slider"></span></label>
               </div>
             </div>
@@ -111,8 +109,8 @@
                  <p class="setting-description small-text">URL: {{ server.server_url }} <span v-if="server.type === 'local'" style="color: var(--accent-color); font-weight: bold;">(Requires Local Setup)</span></p>
                </div>
                <div class="setting-control">
-                  <button v-if="server.requires_auth" @click="openAuthModal(server)" class="form-button small-button" :disabled="mcpServerSettings.some(s => s.server_name === 'Figma')">
-                    {{ mcpServerSettings.some(s => s.server_name === 'Figma') ? 'Connected' : 'Connect' }}
+                  <button v-if="server.requires_auth" @click="openAuthModal(server)" class="form-button small-button" :disabled="mcpServerSettings.some(s => s.server_name === server.server_name)">
+                    {{ mcpServerSettings.some(s => s.server_name === server.server_name) ? 'Connected' : 'Connect' }}
                   </button>
                   <button v-else @click="addPreapprovedServer(server)" class="form-button small-button" :disabled="mcpServerSettings.some(s => s.server_name === server.server_name)">
                     {{ mcpServerSettings.some(s => s.server_name === server.server_name) ? 'Added' : 'Add' }}
@@ -197,23 +195,35 @@
             </div>
           </div>
         </div>
-
       </main>
     </div>
+
+    <!-- Server Config Modal -->
+    <ServerConfigModal
+      :isOpen="showConfigModal"
+      :serverId="configServer?.id"
+      :serverName="configServer?.server_name"
+      :serverUrl="configServer?.server_url"
+      :isActive="configServer?.is_active"
+      @close="closeConfigModal"
+      @update-server="handleServerUpdate"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue';
+import { useToast } from 'vue-toastification';
+import ServerConfigModal from './ServerConfigModal.vue';
 
 const BACKEND_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
 const activeCategory = ref('profile'); // Default to profile
+const toast = useToast();
 
 // --- Profile State ---
 const isEditingProfile = ref(false);
 const profileForm = reactive({ username: '', email: '' });
-const profileMessage = ref('');
-const isProfileError = ref(false);
+// Removed local profileMessage/isProfileError as we use toast now
 
 // --- Appearance State ---
 const compactUiEnabled = ref(false);
@@ -227,14 +237,13 @@ const newMcpServer = reactive({ server_name: '', server_url: '', is_active: true
 const getAuthHeaders = () => {
   const token = localStorage.getItem('token');
   if (!token) {
-    alert('Authentication token not found. Please log in.'); return null;
+    toast.error('Authentication token not found. Please log in.'); return null;
   }
   return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
 };
 
 const setActiveCategory = (category) => {
   activeCategory.value = category;
-  if (category === 'profile') loadProfileData();
   if (category === 'profile') loadProfileData();
   if (category === 'connections') {
     fetchMcpServerSettings();
@@ -256,7 +265,6 @@ const loadProfileData = () => {
 
 const startEditingProfile = () => {
   isEditingProfile.value = true;
-  profileMessage.value = '';
 };
 
 const cancelEditingProfile = () => {
@@ -266,16 +274,15 @@ const cancelEditingProfile = () => {
 
 const handleProfileUpdate = async () => {
   const headers = getAuthHeaders(); if (!headers) return;
-  profileMessage.value = 'Saving...'; isProfileError.value = false;
   try {
     const response = await fetch(`${BACKEND_BASE_URL}/users/me`, { method: 'PUT', headers, body: JSON.stringify(profileForm) });
     const updatedUser = await response.json();
     if (!response.ok) throw new Error(updatedUser.detail || 'Failed to update profile.');
     localStorage.setItem('user', JSON.stringify(updatedUser));
-    profileMessage.value = 'Profile updated successfully!';
+    toast.success('Profile updated successfully!');
     isEditingProfile.value = false;
   } catch (error) {
-    profileMessage.value = error.message; isProfileError.value = true;
+    toast.error(error.message);
   }
 };
 
@@ -285,8 +292,8 @@ const fetchMcpServerSettings = async () => {
   try {
     const response = await fetch(`${BACKEND_BASE_URL}/api/mcp/settings/`, { headers });
     if (response.ok) mcpServerSettings.value = await response.json();
-    else { const e = await response.json(); alert(`Fetch failed: ${e.detail}`); }
-  } catch (e) { alert(`Error: ${e.message}`); }
+    else { const e = await response.json(); toast.error(`Fetch failed: ${e.detail}`); }
+  } catch (e) { toast.error(`Error: ${e.message}`); }
 };
 
 const fetchPreapprovedServers = async () => {
@@ -300,7 +307,7 @@ const fetchPreapprovedServers = async () => {
 
 const addPreapprovedServer = async (server) => {
   const exists = mcpServerSettings.value.some(s => s.server_name === server.server_name);
-  if (exists) { alert('This server is already in your list.'); return; }
+  if (exists) { toast.info('This server is already in your list.'); return; }
   
   const headers = getAuthHeaders(); if (!headers) return;
   
@@ -315,54 +322,57 @@ const addPreapprovedServer = async (server) => {
       const res = await fetch(`${BACKEND_BASE_URL}/api/mcp/settings/`, { method: 'POST', headers, body: JSON.stringify(finalPayload) });
       if (res.ok) {
         const saved = await res.json();
-        alert('Server added successfully!');
+        toast.success('Server added successfully!');
         mcpServerSettings.value.push(saved);
-      } else { const e = await res.json(); alert(`Failed to add server: ${e.detail}`); }
-  } catch(e) { alert(`Error: ${e.message}`); }
+      } else { const e = await res.json(); toast.error(`Failed to add server: ${e.detail}`); }
+  } catch(e) { toast.error(`Error: ${e.message}`); }
 };
 
 const testNewConnection = async () => {
-  if (!newMcpServer.server_url) { alert('Please enter a server URL.'); return; }
+  if (!newMcpServer.server_url) { toast.warning('Please enter a server URL.'); return; }
   try {
     const res = await fetch(`${BACKEND_BASE_URL}/api/mcp/test-connection`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ server_url: newMcpServer.server_url }),
     });
     const data = await res.json();
-    alert(res.ok ? `Success: ${data.message}` : `Failed: ${data.detail}`);
-  } catch (e) { alert(`Error: ${e.message}`); }
+    if (res.ok) toast.success(`Success: ${data.message}`);
+    else toast.error(`Failed: ${data.detail}`);
+  } catch (e) { toast.error(`Error: ${e.message}`); }
 };
 
 const saveNewConnection = async () => {
-  if (!newMcpServer.server_name || !newMcpServer.server_url) { alert('Please provide a server name and URL.'); return; }
+  if (!newMcpServer.server_name || !newMcpServer.server_url) { toast.warning('Please provide a server name and URL.'); return; }
   const headers = getAuthHeaders(); if (!headers) return;
   try {
     const res = await fetch(`${BACKEND_BASE_URL}/api/mcp/settings/`, { method: 'POST', headers, body: JSON.stringify(newMcpServer) });
     if (res.ok) {
       const saved = await res.json();
-      alert('Connection saved!'); mcpServerSettings.value.push(saved);
+      toast.success('Connection saved!'); mcpServerSettings.value.push(saved);
       Object.assign(newMcpServer, { server_name: '', server_url: '', is_active: true, description: '' });
-    } else { const e = await res.json(); alert(`Save failed: ${e.detail}`); }
-  } catch (e) { alert(`Error: ${e.message}`); }
+    } else { const e = await res.json(); toast.error(`Save failed: ${e.detail}`); }
+  } catch (e) { toast.error(`Error: ${e.message}`); }
 };
 
-const editSetting = (setting) => alert(`Editing: ${setting.server_name}`);
+const editSetting = (setting) => toast.info(`Editing: ${setting.server_name} (Not implemented yet)`);
 
 const toggleSettingActive = async (setting) => {
   const headers = getAuthHeaders(); if (!headers) { setting.is_active = !setting.is_active; return; }
   try {
     const res = await fetch(`${BACKEND_BASE_URL}/api/mcp/settings/${setting.id}`, { method: 'PATCH', headers, body: JSON.stringify({ is_active: setting.is_active }) });
-    if (!res.ok) { const e = await res.json(); alert(`Update failed: ${e.detail}`); setting.is_active = !setting.is_active; }
-  } catch (e) { alert(`Error: ${e.message}`); setting.is_active = !setting.is_active; }
+    if (!res.ok) { const e = await res.json(); toast.error(`Update failed: ${e.detail}`); setting.is_active = !setting.is_active; }
+    else { toast.success(`Server ${setting.is_active ? 'enabled' : 'disabled'}`); }
+  } catch (e) { toast.error(`Error: ${e.message}`); setting.is_active = !setting.is_active; }
 };
 
 const deleteSetting = async (settingId) => {
+  // Use window.confirm for critical actions
   if (!confirm('Are you sure you want to delete this connection?')) return;
   const headers = getAuthHeaders(); if (!headers) return;
   try {
     const res = await fetch(`${BACKEND_BASE_URL}/api/mcp/settings/${settingId}`, { method: 'DELETE', headers });
-    if (res.ok) { alert('Deleted!'); mcpServerSettings.value = mcpServerSettings.value.filter(s => s.id !== settingId); }
-    else { const e = await res.json(); alert(`Delete failed: ${e.detail}`); }
-  } catch (e) { alert(`Error: ${e.message}`); }
+    if (res.ok) { toast.success('Connection deleted'); mcpServerSettings.value = mcpServerSettings.value.filter(s => s.id !== settingId); }
+    else { const e = await res.json(); toast.error(`Delete failed: ${e.detail}`); }
+  } catch (e) { toast.error(`Error: ${e.message}`); }
 };
 
 
@@ -377,6 +387,26 @@ const authConfig = reactive({
 
 const showToolsModal = ref(false);
 const currentServerTools = ref([]);
+
+// --- CONFIG MODAL STATE ---
+const showConfigModal = ref(false);
+const configServer = ref(null);
+
+const openConfigModal = (server) => {
+  configServer.value = server;
+  showConfigModal.value = true;
+};
+
+const closeConfigModal = () => {
+  showConfigModal.value = false;
+  configServer.value = null;
+};
+
+const handleServerUpdate = () => {
+  // Refresh server list if needed
+  fetchMcpServerSettings();
+};
+
 
 const openAuthModal = (server) => {
   authConfig.server = server;
@@ -412,7 +442,7 @@ const closeAuthModal = () => {
 
 const startOAuthFlow = async () => {
   if (!authConfig.usingSharedId && !authConfig.client_id) {
-     alert("Please provide Client ID");
+     toast.warning("Please provide Client ID");
      return;
   }
   
@@ -434,7 +464,7 @@ const startOAuthFlow = async () => {
      
      if (!initRes.ok) {
          const err = await initRes.json();
-         alert(`Error starting auth: ${err.detail}`);
+         toast.error(`Error starting auth: ${err.detail}`);
          return;
      }
      
@@ -453,16 +483,16 @@ const startOAuthFlow = async () => {
                      headers
                  });
                  if (finalRes.ok) {
-                     alert("Connected successfully!");
+                     toast.success("Connected successfully!");
                      closeAuthModal();
                      fetchMcpServerSettings(); // Refresh list
                  } else {
                      const err = await finalRes.json();
-                     alert(`Failed to finalize connection: ${err.detail}`);
+                     toast.error(`Failed to finalize connection: ${err.detail}`);
                  }
              } catch(e) {
                  console.error(e);
-                 alert("Error finalizing connection.");
+                 toast.error("Error finalizing connection.");
              }
          }
      };
@@ -470,7 +500,7 @@ const startOAuthFlow = async () => {
      
   } catch(e) {
       console.error(e);
-      alert("Error initiating auth flow.");
+      toast.error("Error initiating auth flow.");
   }
 };
 
@@ -500,6 +530,8 @@ onMounted(() => {
   if (activeCategory.value === 'profile') {
     loadProfileData();
   }
+  // Always fetch preapproved servers so they are ready
+  fetchPreapprovedServers();
 });
 </script>
 
@@ -614,12 +646,12 @@ onMounted(() => {
 }
 
 .settings-nav a.active {
-  background-color: var(--accent-color);
-  color: white;
+  background-color: var(--text-primary);
+  color: var(--bg-primary);
 }
 
 .settings-nav a.active svg {
-  stroke: white;
+  stroke: var(--bg-primary);
 }
 
 /* Content */
@@ -788,14 +820,14 @@ onMounted(() => {
 }
 
 .form-button.secondary-button {
-  background-color: var(--bg-secondary);
+  background-color: transparent;
+  border: 1px solid var(--border-color);
   color: var(--text-primary);
-  border-color: var(--border-color);
 }
 
 .form-button.secondary-button:hover {
-  background-color: var(--bg-primary);
-  border-color: var(--text-secondary);
+  background-color: var(--hover-bg);
+  opacity: 1;
 }
 
 .form-button.small-button {
