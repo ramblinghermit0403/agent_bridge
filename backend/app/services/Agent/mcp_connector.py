@@ -7,12 +7,25 @@ from mcp.client.streamable_http import streamable_http_client
 import httpx
 import json
 import logging
+from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
 
 class MCPConnector:
-    def __init__(self, server_url: str, credentials: Optional[str] = None):
+    def __init__(
+        self, 
+        server_url: str, 
+        credentials: Optional[str] = None,
+        server_name: Optional[str] = None,
+        oauth_config: Optional[Dict] = None,
+        db_session: Optional[Any] = None,
+        setting_id: Optional[int] = None
+    ):
         self.server_url = server_url
+        self.server_name = server_name
+        self.oauth_config = oauth_config
+        self.db_session = db_session
+        self.setting_id = setting_id
         self._parsed_url = urlparse(server_url)
         self._credentials = self._parse_credentials(credentials)
         self._token = self._extract_token()
@@ -51,8 +64,73 @@ class MCPConnector:
         # 2. Try URL Query (Legacy/Fallback)
         query = parse_qs(self._parsed_url.query)
         return query.get("token", [None])[0]
+    
+    async def _ensure_valid_token(self) -> bool:
+        """
+        Check if token is valid and refresh if needed.
+        Returns True if token is valid/refreshed, False if refresh failed.
+        """
+        # Skip if no credentials or no refresh capability
+        if not self._credentials or not self.server_name or not self.oauth_config:
+            return True  # Assume valid, will fail naturally if not
+        
+        from ..token_refresh import is_token_expired, refresh_oauth_token
+        
+        # Check if token needs refresh
+        if not is_token_expired(self._credentials):
+            return True  # Token still valid
+        
+        logger.info(f"Token expired for {self.server_name}, attempting refresh...")
+        
+        # Attempt refresh
+        new_credentials = await refresh_oauth_token(
+            self.server_name,
+            self._credentials,
+            self.oauth_config
+        )
+        
+        if not new_credentials:
+            logger.error(f"Failed to refresh token for {self.server_name}")
+            return False
+        
+        # Update credentials
+        self._credentials = new_credentials
+        self._token = new_credentials.get("access_token")
+        
+        # Update headers with new token
+        if "figma.com" in self.server_url:
+            self._headers = {"X-Figma-Token": self._token}
+        elif "notion.com" in self.server_url:
+            self._headers = {
+                "Authorization": f"Bearer {self._token}",
+                "Notion-Version": "2022-06-28"
+            }
+        else:
+            self._headers = {"Authorization": f"Bearer {self._token}"}
+        
+        # Update database if we have a session and setting_id
+        if self.db_session and self.setting_id:
+            try:
+                from ...models.settings import McpServerSetting
+                stmt = select(McpServerSetting).where(McpServerSetting.id == self.setting_id)
+                result = await self.db_session.execute(stmt)
+                setting = result.scalars().first()
+                
+                if setting:
+                    setting.credentials = json.dumps(new_credentials)
+                    self.db_session.add(setting)
+                    await self.db_session.commit()
+                    logger.info(f"Updated credentials in database for {self.server_name}")
+            except Exception as e:
+                logger.error(f"Failed to update credentials in database: {e}")
+        
+        return True
 
     async def list_tools(self) -> List[Dict[str, Any]]:
+        # Ensure token is valid before making API call
+        if not await self._ensure_valid_token():
+            raise RuntimeError(f"Token refresh failed for {self.server_name}. Please re-authenticate.")
+        
         # Try SSE first, then Streamable HTTP
         try:
             return await self._list_tools_sse()
@@ -104,6 +182,10 @@ class MCPConnector:
                     return await self._process_tools_result(tools_result)
 
     async def run_tool(self, tool_name: str, parameters: dict):
+        # Ensure token is valid before making API call
+        if not await self._ensure_valid_token():
+            return f"Error: Token refresh failed for {self.server_name}. Please re-authenticate in settings."
+        
         try:
             return await self._run_tool_sse(tool_name, parameters)
         except (httpx.ConnectError, Exception) as e:

@@ -464,53 +464,69 @@ async def finalize_oauth_flow(
     
     print(f"DEBUG: Found state. Token URL: {stored_state['token_url']}")
 
+    credentials_json = None
+    server_url = stored_state['server_url'] 
+    server_name = stored_state.get('server_name', 'Figma')
+
     # Exchange code for token
     async with httpx.AsyncClient() as client:
         try:
-           # Figma/GitHub use Basic Auth, Notion uses client credentials in body
-           auth = httpx.BasicAuth(stored_state['client_id'], stored_state['client_secret'])
+            # Figma/GitHub use Basic Auth, Notion uses client credentials in body
+            auth = httpx.BasicAuth(stored_state['client_id'], stored_state['client_secret'])
            
-           data = {
-               "redirect_uri": stored_state['redirect_uri'],
-               "code": code,
-               "grant_type": "authorization_code",
-           }
+            data = {
+                "redirect_uri": stored_state['redirect_uri'],
+                "code": code,
+                "grant_type": "authorization_code",
+            }
            
-           # Add PKCE code_verifier if present (OAuth 2.1)
-           if "code_verifier" in stored_state:
-               data["code_verifier"] = stored_state['code_verifier']
+            # Add PKCE code_verifier if present (OAuth 2.1)
+            if "code_verifier" in stored_state:
+                data["code_verifier"] = stored_state['code_verifier']
            
-           print(f"DEBUG: Sending token request to {stored_state['token_url']}")
+            print(f"DEBUG: Sending token request to {stored_state['token_url']}")
            
-           resp = await client.post(
-               stored_state['token_url'], 
-               data=data, 
-               auth=auth,
-               headers={"Accept": "application/json"}
-           )
+            resp = await client.post(
+                stored_state['token_url'], 
+                data=data, 
+                auth=auth,
+                headers={"Accept": "application/json"}
+            )
            
-           print(f"DEBUG: Token response status: {resp.status_code}")
-           if resp.status_code != 200:
-               print(f"DEBUG: Token response body: {resp.text}")
-               logger.error(f"Token exchange failed: {resp.text}")
-               raise HTTPException(status_code=400, detail=f"Token exchange failed: {resp.text}")
-           
-           token_data = resp.json()
-           import json
-           credentials_json = json.dumps(token_data) 
-           print("DEBUG: Token exchanged successfully.")
+            print(f"DEBUG: Token response status: {resp.status_code}")
+            if resp.status_code != 200:
+                print(f"DEBUG: Token response body: {resp.text}")
+                logger.error(f"Token exchange failed: {resp.text}")
+                raise HTTPException(status_code=400, detail=f"Token exchange failed: {resp.text}")
+
+            token_data = resp.json()
+            
+            # Calculate expiry
+            import time
+            expires_in = token_data.get("expires_in", 3600) # Default 1 hour
+            expires_at = int(time.time()) + expires_in
+
+            # Build credentials with expiry info
+            credentials_dict = {
+                "access_token": token_data.get("access_token"),
+                "refresh_token": token_data.get("refresh_token"),
+                "expires_at": expires_at,
+                "token_type": token_data.get("token_type", "Bearer")
+            }
+            
+            import json
+            credentials_json = json.dumps(credentials_dict)
+            print(f"DEBUG: Token exchanged successfully. Expires at: {expires_at}")
                
+        except HTTPException:
+            raise # Re-raise FastAPI HTTP exceptions
         except Exception as e:
             import traceback
             traceback.print_exc()
             logger.error(f"Error during token exchange: {e}")
             raise HTTPException(status_code=500, detail=f"Internal error during token exchange: {e}")
 
-        
     # Finalize: Store Credentials in DB column
-    server_url = stored_state['server_url'] 
-    server_name = stored_state.get('server_name', 'Figma') # Fallback for legacy
-    
     # Check if setting exists
     stmt = select(McpServerSetting).where(
         McpServerSetting.user_id == current_user.id,
