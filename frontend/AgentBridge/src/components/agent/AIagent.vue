@@ -3,43 +3,7 @@
     <div class="branding">
     </div>
 
-<div v-if="messages.length === 0 && !isTyping && !isAgentProcessing" class="greeting-container">
-  
-  <div v-if="!isWelcomeBoxClosed" class="welcome-box">
-    <button @click="closeWelcomeBox" class="close-welcome-button" title="Close">×</button>
-    
-    <h2 class="welcome-title">Welcome to Agent Bridge</h2>
-    
-    <p class="welcome-subtitle">
-      Your central hub for orchestrating tasks across multiple MCP servers. Connect your tools, leverage powerful LLMs, and automate complex workflows.
-      <span class="learn-more-container"><u><router-link to="/learn-more">Learn More</router-link></u></span>
-    </p>
-
-
-    <div class="capabilities-grid">
-      <div class="capability-card">
-        <h3 class="capability-title">Connect Your Servers</h3>
-        <p class="capability-desc">Easily add and manage connections to your various Modern Context Protocol (MCP) servers in one place.</p>
-      </div>
-      <div class="capability-card">
-        <h3 class="capability-title">Orchestrate Complex Tasks</h3>
-        <p class="capability-desc">Use natural language to combine tools from different servers to achieve multi-step goals effortlessly.</p>
-      </div>
-      <div class="capability-card"> 
-        <h3 class="capability-title">Unified Tool Access</h3>
-        <p class="capability-desc">Simply describe what you need. Agent Bridge finds and uses the right tool from any connected server for you.</p>
-      </div>
-    </div>
-    
-
-  </div>
-      
-      <h1 v-else class="greeting-text">
-        {{ greetingText }}<span class="cursor-blink">|</span>
-      </h1>
-    </div>
-
-    <div v-else ref="chatList" class="messages-list styled-scrollbar">
+    <div v-if="messages.length > 0" ref="chatList" class="messages-list styled-scrollbar">
       <div v-for="(msg, index) in messages" :key="index" class="message-row" :class="[msg.role === 'user' ? 'justify-end' : 'justify-start']">
         
         <!-- Standard Message Bubble -->
@@ -96,9 +60,14 @@
       </div>
     </div>
 
-    <div class="input-area-container">
-      <div class="input-area">
-        <div class="input-wrapper">
+    <div class="input-area-container" :class="{ 'centered': messages.length === 0 && !isTyping && !isAgentProcessing }">
+      <div class="centered-content">
+        <div v-if="messages.length === 0 && !isTyping && !isAgentProcessing" class="greeting-wrapper">
+            <h1 class="greeting-line-1"><span class="greeting-icon">✨</span> Hi {{ userName || 'there' }}</h1>
+            <h2 class="greeting-line-2">Ready to make some magic?</h2>
+        </div>
+        <div class="input-area">
+          <div class="input-wrapper">
           <div v-if="attachedFile" class="file-preview">
             <div class="file-info"><div class="file-type-badge">{{ fileType }}</div><div class="file-name">{{ attachedFile.name }}</div></div>
             <button @click="clearFile" class="clear-file-button">×</button>
@@ -116,7 +85,10 @@
             </div>
             <button @click="sendMessage" class="send-button" :disabled="(!inputMessage.trim() && !attachedFile) || isAgentProcessing"><span>Send</span><span class="shortcut-keys"><kbd>Ctrl</kbd><span>+</span><kbd>↵</kbd></span></button>
           </div>
+          </div>
         </div>
+        
+
       </div>
     </div>
 
@@ -139,7 +111,6 @@ export default {
   data() {
     return {
       api_url: import.meta.env.VITE_API_URL || "http://localhost:8001",
-      isWelcomeBoxClosed: false,
       token: localStorage.getItem("token"),
       messages: [],
       inputMessage: "",
@@ -147,14 +118,11 @@ export default {
       isAgentProcessing: false,
       attachedFile: null,
       fileType: "",
-      greetingText: "",
-      fullGreeting: "How can I assist you?",
-      typingInterval: null,
       copiedMessageIndex: null,
       eventSource: null,
       currentAgentMessageIndex: -1,
       selectedModel: 'gemini', // Default model
-      // Permission dialog state removed
+      userName: "", // Store dynamic username
     };
   },
 
@@ -180,10 +148,10 @@ export default {
   
   created() {
     this.loadConversation();
+    this.fetchUserProfile();
   },
 
   beforeUnmount() {
-    clearInterval(this.typingInterval);
     if (this.eventSource) {
       this.eventSource.close();
       console.log("SSE connection closed on unmount.");
@@ -198,11 +166,8 @@ export default {
 
       if (!this.sessionId) {
         this.messages = [];
-        this.isWelcomeBoxClosed = false;
         return;
       }
-
-      this.isWelcomeBoxClosed = true;
 
       try {
         const response = await fetch(`${this.api_url}/api/chats/${this.sessionId}`, {
@@ -235,7 +200,6 @@ export default {
           });
         } else if (response.status === 404) {
           this.messages = [];
-          this.isWelcomeBoxClosed = false;
         } else {
           const errorData = await response.json();
           console.error("Failed to load chat history:", errorData.detail);
@@ -248,24 +212,7 @@ export default {
       }
     },
     
-    startTypewriter() {
-      let i = 0;
-      this.greetingText = "";
-      this.typingInterval = setInterval(() => {
-        if (i < this.fullGreeting.length) {
-          this.greetingText += this.fullGreeting.charAt(i);
-          i++;
-        } else {
-          clearInterval(this.typingInterval);
-          this.typingInterval = null;
-        }
-      }, 80);
-    },
 
-    closeWelcomeBox() {
-      this.isWelcomeBoxClosed = true;
-      this.startTypewriter();
-    },
 
     async sendMessage() {
       const prompt = this.inputMessage.trim();
@@ -534,6 +481,22 @@ export default {
         this.toast.error("Failed to deny tool execution");
       }
     },
+
+    async fetchUserProfile() {
+      try {
+        const response = await fetch(`${this.api_url}/users/me`, {
+          headers: {
+             'Authorization': `Bearer ${this.token}`
+          }
+        });
+        if (response.ok) {
+            const data = await response.json();
+            this.userName = data.username;
+        }
+      } catch (e) {
+        console.error("Failed to fetch user profile", e);
+      }
+    },
   },
 };
 </script>
@@ -582,80 +545,128 @@ export default {
 }
 
 .input-area-container { 
-  flex-shrink: 0; /* Prevents the input area from shrinking */ 
+  flex-shrink: 0;
   position: sticky; 
   bottom: 0; 
   padding: 1.5rem; 
   background-color: var(--bg-primary); 
   display: flex; 
-  justify-content: center; 
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.input-area-container.centered {
+  flex-grow: 1;
+  align-items: center;
+  position: relative;
+  bottom: auto;
+  padding-bottom: 20vh; /* Push visual center up */
+}
+
+.centered-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem; /* Reduced from 2rem */
+  width: 100%;
+}
+
+.branding { 
+  padding: 1rem 1.5rem; 
+  flex-shrink: 0; 
 }
 
 
-/* All other existing styles... */
-.welcome-box { 
-  position: relative; 
-  max-width: 48rem; 
-  width: 100%; 
-  padding: 3rem; 
-  background-color: var(--bg-secondary);
-  border: 1px solid var(--border-color); 
-  border-radius: 8px;
-  animation: fade-in 0.6s cubic-bezier(0.16, 1, 0.3, 1); 
-}
-@keyframes fade-in { from { opacity: 0; transform: translateY(20px); scale: 0.98; } to { opacity: 1; transform: translateY(0); scale: 1; } }
 
-.close-welcome-button { position: absolute; top: 1rem; right: 1rem; width: 2.5rem; height: 2.5rem; border-radius: 50%; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-secondary); font-size: 1.25rem; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
-.close-welcome-button:hover { background-color: var(--text-primary); color: var(--bg-primary); border-color: var(--text-primary); transform: rotate(90deg); }
-
-.welcome-title { font-size: 2.25rem; font-weight: 700; text-align: center; color: var(--text-primary); margin-bottom: 1rem; letter-spacing: -0.02em; }
-.welcome-subtitle { text-align: center; color: var(--text-secondary); margin-bottom: 3rem; max-width: 32rem; margin-left: auto; margin-right: auto; font-size: 1.125rem; line-height: 1.6; }
-
-.capabilities-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem; }
-
-.capability-card { 
-  padding: 1.5rem; 
-  background-color: var(--bg-primary);
-  border: 1px solid var(--border-color); 
-  border-radius: 8px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
-  position: relative; 
-  overflow: hidden; 
-}
-.capability-card:hover { 
-  transform: translateY(-2px); 
-  border-color: var(--text-primary);
-  background-color: var(--hover-bg);
-}
-
-.capability-title { font-weight: 700; margin-bottom: 0.75rem; color: var(--text-primary); font-size: 1.1rem; }
-.capability-desc { font-size: 0.95rem; color: var(--text-secondary); line-height: 1.6; }
-.branding { padding: 1rem 1.5rem; flex-shrink: 0; }
-.greeting-container { flex-grow: 1; display: flex; align-items: center; justify-content: center; padding: 1rem; max-height: 65vh; }
-.greeting-text { font-size: 2.25rem; font-weight: 600; text-align: center; color: var(--text-primary); }
-.cursor-blink { animation: cursor-blink-animation 1s step-end infinite; font-weight: 300; }
-@keyframes cursor-blink-animation { from, to { color: transparent; } 50% { color: var(--text-primary); } }
-
+/* --- Message Bubbles & Row Styles (Restored) --- */
 .message-row { width: 100%; max-width: 48rem; display: flex; }
 .justify-end { justify-content: flex-end; }
 .justify-start { justify-content: flex-start; }
 .flex.flex-col { display:flex; flex-direction: column;}
 .items-end { align-items: flex-end; }
 .items-start { align-items: flex-start; }
+
 .message-bubble { display: inline-block; padding: 0.75rem 1rem; word-break: break-word; }
 .user-bubble { max-width: 32rem; background-color: var(--text-primary); color: var(--bg-primary); border-radius: 8px; }
 .agent-bubble { width: 100%; color: var(--text-primary); }
+
 .message-actions { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; }
 .action-button { padding: 0.25rem; border-radius: 9999px; color: var(--text-secondary); transition: background-color 0.2s, color 0.2s; }
 .action-button:hover { background-color: var(--bg-secondary); color: var(--text-primary); }
 .feedback-like { color: var(--text-primary) !important; opacity: 1; }
 .feedback-dislike { color: var(--text-primary) !important; opacity: 1; }
+
 .typing-indicator { display: flex; align-items: center; height: 24px; }
 .typing-dot { display: inline-block; width: 0.5rem; height: 0.5rem; background-color: var(--text-secondary); border-radius: 9999px; margin: 0 0.25rem; animation: typing-blink 1.4s infinite both; }
 @keyframes typing-blink { 0% { opacity: 0.2; } 20% { opacity: 1; } 100% { opacity: 0.2; } }
 
-.input-area { width: 100%; max-width: 48rem; background-color: var(--bg-secondary); border-radius: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1); border: 1px solid var(--border-color); }
-.input-wrapper { border-radius: 1.5rem; display: flex; flex-direction: column; min-height: 100px; padding: 1rem; width: 100%; }
+
+/* Greeting Styles */
+.greeting-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start; /* Align left to match Gemini */
+  gap: 0.5rem;
+  width: 100%;
+  max-width: 48rem;
+  margin-bottom: 0; /* Reduced from 1rem */
+  padding-left: 10px; /* Added left padding */
+}
+
+.greeting-line-1 {
+  font-size: 2.5rem; /* Reduced from 3rem */
+  font-weight: 500;
+  background: linear-gradient(90deg, #4285f4, #9b72cb, #d96570);
+  -webkit-background-clip: text;
+  background-clip: text; /* Standard property for compatibility */
+  -webkit-text-fill-color: transparent;
+  color: transparent; /* Fallback */
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  letter-spacing: -0.03em;
+}
+
+.greeting-icon {
+  font-size: 1.75rem; /* Reduced from 2rem */
+  -webkit-text-fill-color: initial; /* Reset generic color for emoji */
+}
+
+.greeting-line-2 {
+  font-size: 1.75rem; /* Reduced from 2.25rem */
+  font-weight: 400;
+  color: var(--text-secondary); /* Use slightly dimmer color for second line */
+  margin: 0;
+  opacity: 0.8;
+  letter-spacing: -0.02em;
+}
+
+/* Input Area Styles */
+.input-area { 
+  width: 100%; 
+  max-width: 48rem; 
+  background-color: var(--bg-secondary); 
+  border-radius: 2rem; /* Pill shape */
+  box-shadow: none; /* Flatten look */
+  border: 1px solid var(--border-color); /* Keep subtle border */
+  transition: all 0.2s ease;
+}
+
+.input-area:focus-within {
+     background-color: var(--bg-secondary); /* Keep same bg or darken slightly */
+     border-color: var(--text-secondary);
+}
+.input-wrapper { 
+  border-radius: 2rem; 
+  display: flex; 
+  flex-direction: column; 
+  min-height: auto; /* Allow auto height */
+  padding: 0.75rem 1.5rem; /* Adjust padding for pill shape */
+  width: 100%; 
+}
+
+
 .input-textarea { background: transparent; color: var(--text-primary); outline: none; resize: none; flex-grow: 1; font-size: 1rem; }
 .input-textarea::placeholder { color: var(--text-secondary); opacity: 0.8; }
 .input-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 0.75rem; }

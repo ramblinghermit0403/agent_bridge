@@ -13,6 +13,10 @@
 - **OAuth Integration**: Support for Figma and Notion API integrations
 - **Database Support**: PostgreSQL with SQLAlchemy ORM
 
+## 🎥 Demo
+
+[![Agent Bridge Walkthrough](http://img.youtube.com/vi/7w0LObDVEyA/0.jpg)](https://youtu.be/7w0LObDVEyA)
+
 ## 📁 Project Structure
 
 ```
