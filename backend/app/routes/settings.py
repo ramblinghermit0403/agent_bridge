@@ -195,8 +195,8 @@ async def get_preapproved_servers():
         safe_servers.append(server_copy)
     return safe_servers
 
-# Route to list tools for a specific MCP server setting
-@router.get("/api/mcp/settings/{setting_id}/tools")
+# Route to list tools for a specific MCP server setting (DEPRECATED: see tool_permissions.py)
+@router.get("/api/mcp/settings/{setting_id}/tools-deprecated")
 async def list_server_tools(
     setting_id: int,
     current_user: User = Depends(get_current_user),

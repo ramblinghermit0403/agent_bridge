@@ -10,6 +10,7 @@ from ..auth.oauth2 import get_current_user
 from ..models.User import User
 import httpx
 from datetime import datetime, timedelta
+from ..services.Agent.mcp_connector import MCPConnector
 
 router = APIRouter(prefix="/api", tags=["tool-permissions"])
 
@@ -64,15 +65,20 @@ async def get_server_tools(
     if not server_setting:
         raise HTTPException(status_code=404, detail="Server not found")
     
-    # Fetch tools from the MCP server
+    # Fetch tools from the MCP server using proper authentication
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{server_setting.server_url}/tools",
-                timeout=10.0
-            )
-            response.raise_for_status()
-            tools_data = response.json()
+        credentials = None
+        if server_setting.credentials:
+            import json
+            try:
+                credentials = json.loads(server_setting.credentials)
+            except json.JSONDecodeError:
+                pass
+
+        connector = MCPConnector(server_url=server_setting.server_url, credentials=credentials)
+        # MCPConnector.list_tools returns List[Dict] directly
+        tools_data = await connector.list_tools()
+        
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch tools from server: {str(e)}")
     
@@ -90,7 +96,8 @@ async def get_server_tools(
     
     # Combine tools with permission status
     result = []
-    for tool in tools_data.get("tools", []):
+    # tools_data is now directly a list of tool dictionaries
+    for tool in tools_data:
         tool_name = tool.get("name")
         result.append(ToolInfo(
             name=tool_name,

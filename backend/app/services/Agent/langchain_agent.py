@@ -410,9 +410,19 @@ async def build_tools_from_servers(user_mcp_servers: Dict[str, Dict[str, Any]], 
                         fields = {}
                         for prop_name, prop_info in properties.items():
                             prop_type_str = prop_info.get("type", "string")
-                            python_type = {
-                                "string": str, "integer": int, "number": float, "boolean": bool
-                            }.get(prop_type_str, str)
+                            
+                            if prop_type_str == "array":
+                                python_type = List[Any]
+                            elif prop_type_str == "object":
+                                python_type = Dict[str, Any]
+                            elif prop_type_str == "integer":
+                                python_type = int
+                            elif prop_type_str == "number":
+                                python_type = float
+                            elif prop_type_str == "boolean":
+                                python_type = bool
+                            else:
+                                python_type = str
                             
                             field_description = prop_info.get("description", f"The {prop_name} for the tool.")
                             
