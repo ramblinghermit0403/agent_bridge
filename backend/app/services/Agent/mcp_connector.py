@@ -7,7 +7,9 @@ from mcp.client.streamable_http import streamablehttp_client
 import httpx
 import json
 import logging
+import logging
 from sqlalchemy import select
+from ...database.database import AsyncSessionLocal
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +67,7 @@ class MCPConnector:
         query = parse_qs(self._parsed_url.query)
         return query.get("token", [None])[0]
     
-    async def _ensure_valid_token(self) -> bool:
+    async def _ensure_valid_token(self, force_refresh: bool = False) -> bool:
         """
         Check if token is valid and refresh if needed.
         Returns True if token is valid/refreshed, False if refresh failed.
@@ -77,10 +79,10 @@ class MCPConnector:
         from ..token_refresh import is_token_expired, refresh_oauth_token
         
         # Check if token needs refresh
-        if not is_token_expired(self._credentials):
+        if not force_refresh and not is_token_expired(self._credentials):
             return True  # Token still valid
         
-        logger.info(f"Token expired for {self.server_name}, attempting refresh...")
+        logger.info(f"Token expired (or forced) for {self.server_name}, attempting refresh...")
         
         # Attempt refresh
         new_credentials = await refresh_oauth_token(
@@ -108,30 +110,34 @@ class MCPConnector:
         else:
             self._headers = {"Authorization": f"Bearer {self._token}"}
         
-        # Update database if we have a session and setting_id
-        if self.db_session and self.setting_id:
+        # Update database if we have a setting_id
+        if self.setting_id:
             try:
-                from ...models.settings import McpServerSetting
-                stmt = select(McpServerSetting).where(McpServerSetting.id == self.setting_id)
-                result = await self.db_session.execute(stmt)
-                setting = result.scalars().first()
-                
-                if setting:
-                    setting.credentials = json.dumps(new_credentials)
-                    self.db_session.add(setting)
-                    await self.db_session.commit()
-                    logger.info(f"Updated credentials in database for {self.server_name}")
+                # Use a fresh session for the update to ensure it persists correctly
+                # regardless of the original request's session state.
+                async with AsyncSessionLocal() as session:
+                    from ...models.settings import McpServerSetting
+                    stmt = select(McpServerSetting).where(McpServerSetting.id == self.setting_id)
+                    result = await session.execute(stmt)
+                    setting = result.scalars().first()
+                    
+                    if setting:
+                        setting.credentials = json.dumps(new_credentials)
+                        session.add(setting)
+                        await session.commit()
+                        logger.info(f"Updated credentials in database for {self.server_name} (Setting ID: {self.setting_id})")
+                    else:
+                        logger.warning(f"Setting ID {self.setting_id} not found in database while trying to update token.")
             except Exception as e:
                 logger.error(f"Failed to update credentials in database: {e}")
         
         return True
 
     async def list_tools(self) -> List[Dict[str, Any]]:
-        # Ensure token is valid before making API call
-        if not await self._ensure_valid_token():
-            raise RuntimeError(f"Token refresh failed for {self.server_name}. Please re-authenticate.")
-        
-        # Try SSE first, then Streamable HTTP
+        return await self._execute_with_retry(self._list_tools_internal)
+
+    async def _list_tools_internal(self):
+         # Try SSE first, then Streamable HTTP
         try:
             return await self._list_tools_sse()
         except Exception as e:
@@ -140,7 +146,55 @@ class MCPConnector:
                 return await self._list_tools_streamable()
             except Exception as e2:
                 logger.error(f"Streamable HTTP connection also failed: {e2}")
-                raise RuntimeError(f"Could not connect to MCP server via SSE or Streamable HTTP. Last error: {e2}")
+                raise e2
+
+    async def _execute_with_retry(self, operation, *args, **kwargs):
+        """
+        Generic retry logic for 401s:
+        1. Ensure token valid (standard check).
+        2. Try operation.
+        3. If 401/Auth error, Force Refresh -> Retry.
+        """
+        # 1. Initial Standard Check
+        if not await self._ensure_valid_token():
+             raise RuntimeError(f"Token refresh failed for {self.server_name}. Please re-authenticate.")
+
+        try:
+            return await operation(*args, **kwargs)
+        except Exception as e:
+            # Recursively check for 401 or auth-related errors in exceptions and nested groups
+            def is_auth_exception(exc):
+                msg = str(exc).lower()
+                if "401" in msg or "unauthorized" in msg or "authentication failed" in msg:
+                    return True
+                # Check direct cause or context
+                if getattr(exc, '__cause__', None) and is_auth_exception(exc.__cause__):
+                    return True
+                if getattr(exc, '__context__', None) and is_auth_exception(exc.__context__):
+                    return True
+                # Check nested exceptions (ExceptionGroup / TaskGroup)
+                if hasattr(exc, 'exceptions'):
+                    for sub_exc in exc.exceptions:
+                        if is_auth_exception(sub_exc):
+                            return True
+                return False
+
+            if is_auth_exception(e):
+                logger.warning(f"Authentication failed for {self.server_name} (Error: {e}). Forcing token refresh and retrying...")
+                
+                # 2. Force Refresh
+                if await self._ensure_valid_token(force_refresh=True):
+                    # 3. Retry Operation
+                    try:
+                        logger.info(f"Retrying operation for {self.server_name} with new token...")
+                        return await operation(*args, **kwargs)
+                    except Exception as retry_e:
+                        logger.error(f"Retry failed for {self.server_name}: {retry_e}")
+                        raise retry_e
+                else:
+                     raise RuntimeError(f"Forced token refresh failed for {self.server_name}. Please re-authenticate.")
+            else:
+                raise e
 
     async def _process_tools_result(self, tools_result) -> List[Dict[str, Any]]:
         tool_list = []
@@ -189,21 +243,22 @@ class MCPConnector:
                 return await self._process_tools_result(tools_result)
 
     async def run_tool(self, tool_name: str, parameters: dict):
-        # Ensure token is valid before making API call
-        if not await self._ensure_valid_token():
-            return f"Error: Token refresh failed for {self.server_name}. Please re-authenticate in settings."
-        
+        async def _run_tool_internal(tool_name, parameters):
+             try:
+                return await self._run_tool_sse(tool_name, parameters)
+             except (httpx.ConnectError, Exception) as e:
+                logger.warning(f"SSE run_tool failed for {tool_name}: {e}. Trying Streamable HTTP...")
+                try:
+                    return await self._run_tool_streamable(tool_name, parameters)
+                except (httpx.ConnectError, Exception) as e2:
+                    logger.error(f"Tool execution failed for {tool_name} on {self.server_url}: {e2}")
+                    raise e2
+
         try:
-            return await self._run_tool_sse(tool_name, parameters)
-        except (httpx.ConnectError, Exception) as e:
-            logger.warning(f"SSE run_tool failed for {tool_name}: {e}. Trying Streamable HTTP...")
-            try:
-                # Fallback to Streamable
-                return await self._run_tool_streamable(tool_name, parameters)
-            except (httpx.ConnectError, Exception) as e2:
-                logger.error(f"Tool execution failed for {tool_name} on {self.server_url}: {e2}")
-                # Return string error instead of raising to prevent agent crash
-                return f"Error: Could not connect to any MCP server at {self.server_url}. Please ensure the server is running. Details: {e2}"
+             return await self._execute_with_retry(_run_tool_internal, tool_name, parameters)
+        except Exception as e:
+             # Final fallback to return string error so agent doesn't crash
+             return f"Error: Tool execution failed for {self.server_name}. {str(e)}"
 
     async def _run_tool_sse(self, tool_name: str, parameters: dict):
          try:

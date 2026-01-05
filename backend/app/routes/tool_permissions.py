@@ -11,6 +11,7 @@ from ..models.User import User
 import httpx
 from datetime import datetime, timedelta
 from ..services.Agent.mcp_connector import MCPConnector
+from ..core.preapproved_servers import preapproved_mcp_servers
 
 router = APIRouter(prefix="/api", tags=["tool-permissions"])
 
@@ -75,7 +76,20 @@ async def get_server_tools(
             except json.JSONDecodeError:
                 pass
 
-        connector = MCPConnector(server_url=server_setting.server_url, credentials=credentials)
+        # Lookup OAuth config from preapproved list
+        oauth_config = None
+        server_name = server_setting.server_name
+        server_info = next((s for s in preapproved_mcp_servers if s['server_name'] == server_name), None)
+        if server_info:
+            oauth_config = server_info.get('oauth_config')
+
+        connector = MCPConnector(
+            server_url=server_setting.server_url, 
+            credentials=credentials,
+            server_name=server_name,
+            setting_id=server_id,
+            oauth_config=oauth_config
+        )
         # MCPConnector.list_tools returns List[Dict] directly
         tools_data = await connector.list_tools()
         

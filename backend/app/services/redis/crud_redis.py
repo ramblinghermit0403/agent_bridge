@@ -175,6 +175,7 @@ async def get_user_servers(db: AsyncSession, user_id: str) -> Dict[str, Dict[str
     server_dict = {}
     for setting in user_settings:
         server_dict[setting.server_name] = {
+            "id": setting.id,
             "url": setting.server_url,
             "credentials": setting.credentials 
         }

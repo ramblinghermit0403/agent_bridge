@@ -93,6 +93,29 @@ def create_tool_func(tool_name: str, connector, pydantic_model=None, user_id: st
         
     return sync_func, async_func
 
+
+def _sanitize_schema(schema: Any) -> Any:
+    """
+    Recursively remove unsupported keys from the schema (e.g. title, default)
+    to avoid warnings/errors with LangChain & Gemini.
+    """
+    if isinstance(schema, dict):
+        new_schema = schema.copy() # Avoid modifying original in place if possible, though deepcopy is safer
+        # Remove offending keys
+        for key in ["title", "default", "additionalProperties", "example", "examples"]:
+            if key in new_schema:
+                del new_schema[key]
+        
+        # Recurse for nested dictionaries (e.g. properties)
+        for k, v in new_schema.items():
+            new_schema[k] = _sanitize_schema(v)
+        return new_schema
+            
+    elif isinstance(schema, list):
+        return [_sanitize_schema(item) for item in schema]
+    
+    return schema
+
 async def build_tools_from_servers(user_mcp_servers: Dict[str, Dict[str, Any]], user_id: str = None, blocking: bool = True) -> List[StructuredTool]:
     """
     Builds LangChain tools from a user-specific server dictionary.
@@ -105,11 +128,22 @@ async def build_tools_from_servers(user_mcp_servers: Dict[str, Dict[str, Any]], 
             if isinstance(server_info, str):
                 url = server_info
                 creds = None
+                oauth_config = None
+                setting_id = None
             else:
                 url = server_info.get("url")
                 creds = server_info.get("credentials")
-
-            connector = MCPConnector(url, credentials=creds)
+                oauth_config = server_info.get("oauth_config")
+                setting_id = server_info.get("id")
+            
+            # Create connector
+            connector = MCPConnector(
+                url, 
+                credentials=creds, 
+                server_name=server_name, 
+                oauth_config=oauth_config,
+                setting_id=setting_id
+            )
             tools_data = await connector.list_tools()
 
             for tool_info in tools_data:
@@ -121,6 +155,9 @@ async def build_tools_from_servers(user_mcp_servers: Dict[str, Dict[str, Any]], 
                 # Create the Pydantic model dynamically from the tool's schema
                 if input_schema and input_schema.get("type") == "object" and "properties" in input_schema:
                     try:
+                        # Sanitize schema to remove unsupported keys
+                        input_schema = _sanitize_schema(input_schema)
+                        
                         properties = input_schema.get("properties", {})
                         required_fields = input_schema.get("required", [])
                         

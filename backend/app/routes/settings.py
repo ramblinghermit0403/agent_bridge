@@ -222,7 +222,20 @@ async def list_server_tools(
                 logger.error("Failed to decode credentials JSON")
                 pass
 
-        connector = MCPConnector(server_url=db_setting.server_url, credentials=credentials)
+        # Lookup OAuth config from preapproved list
+        oauth_config = None
+        server_name = db_setting.server_name
+        server_info = next((s for s in preapproved_mcp_servers if s['server_name'] == server_name), None)
+        if server_info:
+            oauth_config = server_info.get('oauth_config')
+
+        connector = MCPConnector(
+            server_url=db_setting.server_url, 
+            credentials=credentials,
+            server_name=server_name,
+            setting_id=setting_id,
+            oauth_config=oauth_config
+        )
         tools = await connector.list_tools()
         return {"status": "success", "tools": tools}
     except Exception as e:
