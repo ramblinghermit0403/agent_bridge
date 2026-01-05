@@ -21,7 +21,7 @@
           </div>
 
           <div class="message-bubble" :class="[msg.role === 'user' ? 'user-bubble' : 'agent-bubble']">
-            <div v-if="msg.html" v-html="msg.text"></div>
+            <div v-if="msg.role === 'agent' && msg.text" v-html="renderMarkdown(msg.text)"></div>
             <div v-else-if="isAgentProcessing && index === currentAgentMessageIndex && msg.text === ''">
                 <div class="typing-indicator">
                     <span class="typing-dot" style="animation-delay: 0s"></span>
@@ -99,6 +99,7 @@
 <script>
 import { nextTick, defineAsyncComponent } from "vue";
 import { useToast } from "vue-toastification";
+import MarkdownIt from 'markdown-it';
 
 export default {
   components: {
@@ -106,7 +107,12 @@ export default {
   },
   setup() {
     const toast = useToast();
-    return { toast };
+    const md = new MarkdownIt({
+        html: true,
+        linkify: true,
+        typographer: true
+    });
+    return { toast, md };
   },
   data() {
     return {
@@ -123,6 +129,7 @@ export default {
       currentAgentMessageIndex: -1,
       selectedModel: 'gemini', // Default model
       userName: "", // Store dynamic username
+      isUpdatingSession: false,
     };
   },
 
@@ -134,6 +141,10 @@ export default {
 
   watch: {
     sessionId(newId, oldId) {
+      if (this.isUpdatingSession) {
+          this.isUpdatingSession = false;
+          return;
+      }
       if (newId !== oldId) {
         this.loadConversation();
       }
@@ -259,107 +270,9 @@ export default {
           console.log("SSE connection opened!");
         };
 
-        this.eventSource.addEventListener("scratchpad", (event) => {
-            const data = JSON.parse(event.data);
-            let thought = ""; 
+        // Reuse the robust event listener setup
+        this.setupEventSource(this.eventSource);
 
-            if (data.type === 'tool_start') {
-                thought = `Tool Used: ${data.tool_name} with input ${JSON.stringify(data.tool_input)}`;
-            } else if (data.type === 'tool_end') {
-                thought = `Tool Output: ${data.observation}`;
-            } else if (data.type === 'agent_status') {
-                thought = `Status: ${data.content}`;
-            }
-
-            if (this.messages[this.currentAgentMessageIndex] && thought) {
-                this.messages[this.currentAgentMessageIndex].scratchpad.push(thought);
-            }
-        });
-
-        this.eventSource.addEventListener("llm_token", (event) => {
-          const data = JSON.parse(event.data);
-          if (this.messages[this.currentAgentMessageIndex]) {
-            this.messages[this.currentAgentMessageIndex].text += data.content;
-          }
-        });
-
-        this.eventSource.addEventListener("plain_text_answer", (event) => {
-          const data = JSON.parse(event.data);
-          console.log("Received plain text answer:", data.content);
-          if (this.messages[this.currentAgentMessageIndex]) {
-              this.messages[this.currentAgentMessageIndex].text = data.content;
-          }
-        });
-
-        this.eventSource.addEventListener("final_html_output", (event) => {
-          const data = JSON.parse(event.data);
-          if (this.messages[this.currentAgentMessageIndex]) {
-            const rawHtml = data.content;
-            const cleanedHtml = rawHtml.replace(/```html/g, '').replace(/```/g, '').trim();
-
-            this.messages[this.currentAgentMessageIndex].text = cleanedHtml;
-            this.messages[this.currentAgentMessageIndex].html = true;
-          }
-          console.log("Received final HTML output.");
-        });
-
-        // Tool approval required event
-        this.eventSource.addEventListener("tool_approval_required", (event) => {
-            const data = JSON.parse(event.data);
-            console.log("Tool approval required:", data);
-            
-            // Push permission request message to chat
-            this.messages.push({
-                role: 'permission_request',
-                toolName: data.tool_name,
-                serverName: data.server_name,
-                payload: data.payload,
-                approvalId: data.approval_id
-            });
-            // Don't update currentAgentMessageIndex, let agent continue updating the "thinking" block
-            this.scrollToBottom();
-        });
-
-        // Tool approved event
-        this.eventSource.addEventListener("tool_approved", (event) => {
-          const data = JSON.parse(event.data);
-          console.log("Tool approved:", data.tool_name);
-          this.toast.success(`Tool ${data.tool_name} approved`);
-        });
-
-        // Tool denied event
-        this.eventSource.addEventListener("tool_denied", (event) => {
-          const data = JSON.parse(event.data);
-          console.log("Tool denied:", data.tool_name);
-          this.toast.warning(`Tool ${data.tool_name} was denied`);
-        });
-
-        this.eventSource.addEventListener("stream_end", (event) => {
-          const data = JSON.parse(event.data);
-          if (!this.sessionId && data.session_id) {
-            this.$router.replace({
-              query: { ...this.$route.query, session: data.session_id }
-            });
-          }
-          console.log("SSE stream ended.", data);
-          this.isAgentProcessing = false;
-          this.isTyping = false;
-          this.eventSource.close();
-        });
-
-        this.eventSource.onerror = (error) => {
-          console.error("EventSource failed:", error);
-          this.toast.error("Connection lost. Please try again.");
-          if (this.messages[this.currentAgentMessageIndex]) {
-            this.messages[this.currentAgentMessageIndex].text =
-              "❌ Error: Could not get a real-time response. Please try again.";
-            this.messages[this.currentAgentMessageIndex].scratchpad = [];
-            this.messages[this.currentAgentMessageIndex].html = false;
-          }
-          this.isAgentProcessing = false;
-          this.isTyping = false;
-          this.eventSource.close();
-        };
       } catch (error) {
         console.error("Error initiating SSE connection:", error);
         this.toast.error("Failed to send message.");
@@ -453,6 +366,9 @@ export default {
         console.error("Error approving tool:", err);
         this.toast.error("Failed to approve tool execution");
       }
+      
+      // Auto-resume generation
+      this.resumeGeneration();
     },
 
     async handleToolDenial(data, index) {
@@ -480,8 +396,141 @@ export default {
         console.error("Error denying tool:", err);
         this.toast.error("Failed to deny tool execution");
       }
+      
+      // Auto-resume generation (agent will see tool as denied and handle error)
+      this.resumeGeneration();
     },
 
+    async resumeGeneration() {
+       // Logic to resume stream without adding new user message
+       const prompt = "RESUME"; // Dummy prompt, backend ignores it when resume=true
+       const userToken = this.token;
+       
+       this.isAgentProcessing = true;
+       // Do not reset typing or add messages
+       
+       try {
+        if (this.eventSource) this.eventSource.close();
+
+        const baseUrl = `${this.api_url}/ask/stream`;
+        const params = new URLSearchParams();
+        params.append("prompt", prompt);
+        params.append("token", userToken);
+        params.append("resume", "true"); // Key flag
+        
+        if (this.sessionId) {
+          params.append("session_id", this.sessionId);
+        }
+        
+        // --- Add Model Params ---
+        if (this.selectedModel === 'nova-pro') {
+            params.append("model_provider", "bedrock");
+            params.append("model", "apac.amazon.nova-pro-v1:0");
+        } else {
+             params.append("model_provider", "gemini");
+             params.append("model", "gemini-2.5-flash");
+        }
+
+        this.eventSource = new EventSource(`${baseUrl}?${params.toString()}`);
+
+        // Re-attach listeners (Refactor: could pull this out to common function)
+        this.eventSource.onopen = () => { console.log("SSE connection resumed!"); };
+        
+        // reuse same listeners logic...
+        // For brevity in this diff, I need to copy the listeners or refactor.
+        // It's safer to duplicated or refactor into helper method 'setupEventSource(url)'.
+        // Refactoring is better.
+        this.setupEventSource(this.eventSource);
+
+       } catch (error) {
+         console.error("Error resuming SSE:", error);
+         this.toast.error("Failed to resume generation.");
+         this.isAgentProcessing = false;
+       }
+    },
+    
+    setupEventSource(es) {
+        es.addEventListener("scratchpad", (event) => {
+            const data = JSON.parse(event.data);
+            let thought = ""; 
+            if (data.type === 'tool_start') {
+                thought = `Tool Used: ${data.tool_name} with input ${JSON.stringify(data.tool_input)}`;
+            } else if (data.type === 'tool_end') {
+                thought = `Tool Output: ${data.observation}`;
+            } else if (data.type === 'agent_status') {
+                thought = `Status: ${data.content}`;
+            }
+            if (this.messages[this.currentAgentMessageIndex] && thought) {
+                this.messages[this.currentAgentMessageIndex].scratchpad.push(thought);
+            }
+        });
+
+        es.addEventListener("llm_token", (event) => {
+          const data = JSON.parse(event.data);
+          if (this.messages[this.currentAgentMessageIndex]) {
+            this.messages[this.currentAgentMessageIndex].text += data.content;
+          }
+        });
+
+        es.addEventListener("plain_text_answer", (event) => {
+          const data = JSON.parse(event.data);
+          if (this.messages[this.currentAgentMessageIndex]) {
+              this.messages[this.currentAgentMessageIndex].text = data.content;
+          }
+        });
+
+
+
+        es.addEventListener("tool_approval_required", (event) => {
+            const data = JSON.parse(event.data);
+            this.messages.push({
+                role: 'permission_request',
+                toolName: data.tool_name,
+                serverName: data.server_name,
+                payload: data.payload,
+                approvalId: data.approval_id
+            });
+            this.scrollToBottom();
+        });
+
+        es.addEventListener("tool_approved", (event) => {
+          const data = JSON.parse(event.data);
+          this.toast.success(`Tool ${data.tool_name} approved`);
+        });
+
+        es.addEventListener("tool_denied", (event) => {
+          const data = JSON.parse(event.data);
+          this.toast.warning(`Tool ${data.tool_name} was denied`);
+        });
+
+        es.addEventListener("server_error", (event) => {
+          const data = JSON.parse(event.data);
+          this.toast.error(data.message || "An error occurred");
+          if (this.messages[this.currentAgentMessageIndex]) {
+              this.messages[this.currentAgentMessageIndex].text = `❌ Error: ${data.message}`;
+          }
+        });
+
+        es.addEventListener("stream_end", (event) => {
+          const data = JSON.parse(event.data);
+          if (!this.sessionId && data.session_id) {
+            this.isUpdatingSession = true; // Prevent reload
+            this.$router.replace({ query: { ...this.$route.query, session: data.session_id } });
+          }
+          console.log("SSE stream ended.");
+          this.isAgentProcessing = false;
+          this.isTyping = false;
+          es.close();
+        });
+
+        es.onerror = (error) => {
+          console.error("EventSource failed:", error);
+          this.toast.error("Connection lost.");
+          this.isAgentProcessing = false;
+          this.isTyping = false;
+          es.close();
+        };
+    },
     async fetchUserProfile() {
       try {
         const response = await fetch(`${this.api_url}/users/me`, {
@@ -496,6 +545,10 @@ export default {
       } catch (e) {
         console.error("Failed to fetch user profile", e);
       }
+    },
+    renderMarkdown(text) {
+        if (!text) return '';
+        return this.md.render(text);
     },
   },
 };
@@ -713,6 +766,6 @@ kbd { background-color: rgba(255, 255, 255, 0.2); border-radius: 4px; border: 1p
 .scratchpad-area { margin-top: 0.5rem; width: 100%; max-width: 48rem; text-align: left; font-size: 0.75rem; color: var(--text-secondary); }
 .scratchpad-area details { background-color: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 0.5rem 1rem; cursor: pointer; }
 .scratchpad-area summary { font-weight: 600; color: var(--text-primary); list-style: inside; }
-.scratchpad-content { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed var(--border-color); white-space: pre-wrap; word-break: break-all; }
+.scratchpad-content { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed var(--border-color); white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow-y: auto; scrollbar-width: thin; }
 .scratchpad-line { margin-bottom: 0.25rem; color: var(--text-secondary); }
 </style>

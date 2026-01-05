@@ -3,7 +3,7 @@ from typing import Dict, Any, List, Optional
 from urllib.parse import urlparse, parse_qs
 from mcp import ClientSession
 from mcp.client.sse import sse_client
-from mcp.client.streamable_http import streamable_http_client
+from mcp.client.streamable_http import streamablehttp_client
 import httpx
 import json
 import logging
@@ -163,23 +163,30 @@ class MCPConnector:
         return tool_list
 
     async def _list_tools_sse(self):
-        logger.info(f"Connecting via SSE to {self.server_url} with headers: {self._headers.keys()}")
-        # headers supported in newer mcp versions for sse_client
-        async with sse_client(self.server_url, headers=self._headers) as (read_stream, write_stream):
-            async with ClientSession(read_stream, write_stream) as session:
-                await session.initialize()
-                tools_result = await session.list_tools()
-                return await self._process_tools_result(tools_result)
-
-    async def _list_tools_streamable(self):
-        logger.info(f"Connecting via Streamable HTTP to {self.server_url} with headers: {self._headers.keys()}")
-        # Create httpx client with headers (new API requirement)
-        async with httpx.AsyncClient(headers=self._headers, timeout=30.0) as client:
-            async with streamable_http_client(self.server_url, http_client=client) as (read, write, get_session_id):
-                async with ClientSession(read, write) as session:
+        logger.info(f"Connecting via SSE to {self.server_url}")
+        try:
+            # Try with headers first (newer MCP)
+            async with sse_client(self.server_url, headers=self._headers) as (read_stream, write_stream):
+                async with ClientSession(read_stream, write_stream) as session:
                     await session.initialize()
                     tools_result = await session.list_tools()
                     return await self._process_tools_result(tools_result)
+        except TypeError:
+            # Fallback for older MCP versions that don't support headers
+            logger.warning(f"sse_client rejected headers for {self.server_url}, trying without.")
+            async with sse_client(self.server_url) as (read_stream, write_stream):
+                async with ClientSession(read_stream, write_stream) as session:
+                    await session.initialize()
+                    tools_result = await session.list_tools()
+                    return await self._process_tools_result(tools_result)
+
+    async def _list_tools_streamable(self):
+        logger.info(f"Connecting via Streamable HTTP to {self.server_url}")
+        async with streamablehttp_client(self.server_url, headers=self._headers) as (read, write, get_session_id):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                tools_result = await session.list_tools()
+                return await self._process_tools_result(tools_result)
 
     async def run_tool(self, tool_name: str, parameters: dict):
         # Ensure token is valid before making API call
@@ -199,18 +206,24 @@ class MCPConnector:
                 return f"Error: Could not connect to any MCP server at {self.server_url}. Please ensure the server is running. Details: {e2}"
 
     async def _run_tool_sse(self, tool_name: str, parameters: dict):
-         async with sse_client(self.server_url, headers=self._headers) as (read_stream, write_stream):
-            async with ClientSession(read_stream, write_stream) as session:
-                await asyncio.wait_for(session.initialize(), timeout=10.0)
-                # 60s timeout for tool execution
-                result = await asyncio.wait_for(session.call_tool(tool_name, parameters), timeout=60.0)
-                return result.output if hasattr(result, "output") else result
+         try:
+             async with sse_client(self.server_url, headers=self._headers) as (read_stream, write_stream):
+                async with ClientSession(read_stream, write_stream) as session:
+                    await asyncio.wait_for(session.initialize(), timeout=10.0)
+                    result = await asyncio.wait_for(session.call_tool(tool_name, parameters), timeout=60.0)
+                    return result.output if hasattr(result, "output") else result
+         except TypeError:
+             logger.warning(f"sse_client run_tool rejected headers for {self.server_url}, trying without.")
+             async with sse_client(self.server_url) as (read_stream, write_stream):
+                async with ClientSession(read_stream, write_stream) as session:
+                    await asyncio.wait_for(session.initialize(), timeout=10.0)
+                    result = await asyncio.wait_for(session.call_tool(tool_name, parameters), timeout=60.0)
+                    return result.output if hasattr(result, "output") else result
 
     async def _run_tool_streamable(self, tool_name: str, parameters: dict):
-        # Create httpx client with headers (new API requirement)
-        async with httpx.AsyncClient(headers=self._headers, timeout=httpx.Timeout(30.0, read=60.0)) as client:
-            async with streamable_http_client(self.server_url, http_client=client) as (read, write, get_session_id):
-                async with ClientSession(read, write) as session:
-                    await session.initialize()
-                    result = await session.call_tool(tool_name, parameters)
-                    return result.output if hasattr(result, "output") else result
+        # Pass headers to support authentication
+        async with streamablehttp_client(self.server_url, headers=self._headers) as (read, write, get_session_id):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                result = await session.call_tool(tool_name, parameters)
+                return result.output if hasattr(result, "output") else result

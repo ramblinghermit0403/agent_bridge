@@ -24,7 +24,8 @@ class PendingApproval:
             'server_name': server_name,
             'tool_input': tool_input,
             'approved': None,  # None = pending, True = approved, False = denied
-            'approval_type': None  # 'once' or 'always'
+            'approval_type': None,  # 'once' or 'always'
+            'created_at': datetime.utcnow() # Add timestamp for filtering stale requests
         }
         return approval_id
     
