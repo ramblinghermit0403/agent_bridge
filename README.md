@@ -13,18 +13,27 @@
 - **OAuth Integration**: Support for Figma and Notion API integrations
 - **Database Support**: PostgreSQL with SQLAlchemy ORM
 
+## 📚 Documentation
+
+For detailed configuration guides, please see:
+
+- [**Supported MCP Servers**](docs/MCP_SERVERS.md): Setup guide for Figma, GitHub, Notion, and custom servers.
+- [**Supported Providers**](docs/PROVIDERS.md): Configuration for Gemini, Pinecone, and AWS Bedrock.
+- [**Expansion Guide**](docs/EXPANSION.md): How to add new MCP servers, LLM providers, and features.
+
+
+
 ## 🎥 Demo
 
 [![Agent Bridge Walkthrough](http://img.youtube.com/vi/7w0LObDVEyA/0.jpg)](https://youtu.be/7w0LObDVEyA)
 
 ## 📁 Project Structure
 
-```
 ai agent mcp/
 ├── backend/                 # FastAPI backend server
 │   ├── app/
-│   │   ├── routes/         # API endpoints (agent, auth, user, settings, tools)
-│   │   ├── services/       # Business logic and agent services
+│   │   ├── routes/         # API endpoints
+│   │   ├── services/       # Business logic
 │   │   ├── models/         # Database models
 │   │   ├── schemas/        # Pydantic schemas
 │   │   ├── auth/           # Authentication logic
@@ -34,13 +43,15 @@ ai agent mcp/
 │   └── requirements.txt    # Alternative pip dependencies
 │
 └── frontend/               # Vue.js frontend
-    └── AgentBridge/
-        ├── src/
-        │   ├── view/       # Vue pages (dashboard, auth)
-        │   ├── components/ # Reusable Vue components
-        │   ├── router.js   # Vue Router configuration
-        │   └── main.js     # App entry point
-        └── package.json    # Node.js dependencies
+    ├── src/
+    │   ├── view/       # Vue pages
+    │   ├── components/ # Reusable Vue components
+    │   ├── router.js   # Vue Router configuration
+    │   └── main.js     # App entry point
+    └── package.json    # Node.js dependencies
+├── docker-compose.yml   # Docker orchestration
+├── LICENSE              # MIT License
+└── CONTRIBUTING.md      # Contribution guidelines
 ```
 
 ## 🚀 Getting Started
@@ -108,7 +119,7 @@ ai agent mcp/
 
 1. **Navigate to the frontend directory**
    ```bash
-   cd frontend/AgentBridge
+   cd frontend
    ```
 
 2. **Install dependencies**
@@ -128,16 +139,30 @@ ai agent mcp/
    npm run build
    ```
 
+### Run with Docker
+
+1. **Ensure Docker and Docker Compose are installed.**
+
+2. **Configure environment variables:**
+   Copy `.env.example` to `.env` in both `backend/` and `frontend/AgentBridge/` directories and update the values.
+
+3. **Run the services:**
+   ```bash
+   docker-compose up --build
+   ```
+
+   The backend will be available at `http://localhost:8001` and the frontend at `http://localhost:80`.
+
 ## 🔧 Configuration
 
 ### MCP Server Configuration
 
-To connect MCP servers, configure them in your environment or through the settings API. Example MCP servers can be registered using:
-
+To connect MCP servers, edit the `servers.json` file in the backend directory. Then run the bootstrap script:
 ```bash
-python register_figma_client.py
-python register_notion_client.py
+python bootstrap_servers.py your-email@example.com
 ```
+
+This will automatically register or update all servers defined in the configuration file.
 
 ### Database Migrations
 
@@ -172,6 +197,10 @@ The application automatically creates database tables on startup. For manual mig
 - **SQLAlchemy**: ORM for database operations
 - **PostgreSQL**: Primary database
 - **Redis**: Caching and pub/sub
+- **Modular Architecture**: Clean separation of concerns (Auth, Streaming, Agent Logic).
+- **Documentation**:
+  - [Supported MCP Servers](docs/MCP_SERVERS.md) (Figma, Notion, GitHub)
+  - [Supported Providers](docs/PROVIDERS.md) (Gemini, Pinecone)
 - **Pydantic**: Data validation
 - **JWT**: Authentication tokens
 - **MCP**: Model Context Protocol integration
@@ -192,6 +221,12 @@ The application automatically creates database tables on startup. For manual mig
 - CORS middleware for cross-origin requests
 - Environment-based configuration for sensitive data
 - Tool permission system for controlled agent actions
+
+## 🔌 Adding LLM Providers
+
+1. Duplicate `backend/app/services/Agent/providers/openai.py`
+2. Implement your provider logic
+3. Register it in `backend/app/services/Agent/llm_factory.py` in the `PROVIDER_MAP` variable.
 
 ## 📝 API Endpoints
 
@@ -216,7 +251,7 @@ The application automatically creates database tables on startup. For manual mig
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit issues or pull requests.
+Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct, and the process for submitting pull requests to us.
 
 ## 📄 License
 

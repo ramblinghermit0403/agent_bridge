@@ -1,4 +1,4 @@
-from .User import User
+from .user import User
 from .settings import McpServerSetting
 from .tool_permissions import ToolPermission, ToolApproval
 

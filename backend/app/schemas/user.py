@@ -1,19 +1,30 @@
 from pydantic import BaseModel
-from pydantic import BaseModel
 from typing import List, Optional
 
+class UserBase(BaseModel):
+    username: str
+    email: str
 
+class UserCreate(UserBase):
+    password: str
 
-class newuser(BaseModel):
-    username:str
-    email:str
-    password:str
+class UserOut(UserBase):
+    id: str  # changed to str because auth.py guest login uses UUID string
+    is_guest: bool = False
+    class Config:
+        from_attributes = True
 
-# login user model
+class Token(BaseModel):
+    access_token: str
+    token_type: str
 
-class LoginUser(BaseModel):
-    username:str
-    password:str
+class TokenData(BaseModel):
+    email: Optional[str] = None
+
+# Backward compatibility aliases
+newuser = UserCreate
+LoginUser = UserCreate # Login usually just needs username/password but this works
+
 
 
 

@@ -5,16 +5,12 @@ from typing import Any, Dict, List
 from langchain_core.tools import StructuredTool
 from pydantic import create_model, Field, ConfigDict, BaseModel, BaseModel
 
-from .mcp_connector import MCPConnector
+from ..mcp.connector import MCPConnector
 
 logger = logging.getLogger(__name__)
 
 class ToolException(Exception):
     pass
-
-
-
-
 
 def create_tool_func(tool_name: str, connector, pydantic_model=None, user_id: str=None, unique_tool_name: str=None, blocking: bool = True):
     """
@@ -42,7 +38,7 @@ def create_tool_func(tool_name: str, connector, pydantic_model=None, user_id: st
         # If blocking is False (used for LangGraph), we SKIP the check here.
         # The Graph is responsible for checking permissions BEFORE calling the tool.
         if blocking and user_id:
-            from app.services.tool_permissions_helper import check_tool_approval, PendingApproval
+            from app.services.security.permissions import save_tool_approval, PendingApproval
             # Create a fresh async session for the check
             from app.database.database import AsyncSessionLocal
             
@@ -145,9 +141,28 @@ async def build_tools_from_servers(user_mcp_servers: Dict[str, Dict[str, Any]], 
                 setting_id=setting_id
             )
             tools_data = await connector.list_tools()
+            
+            # Get disabled tools for this server from DB (if user_id and setting_id available)
+            disabled_tools = set()
+            if user_id and setting_id:
+                from app.database.database import AsyncSessionLocal
+                from app.services.security.permissions import check_tool_permission
+                
+                async with AsyncSessionLocal() as db:
+                    for tool_info in tools_data:
+                        tool_name = tool_info.get("name")
+                        is_enabled = await check_tool_permission(db, user_id, setting_id, tool_name)
+                        if not is_enabled:
+                            disabled_tools.add(tool_name)
+                            logger.info(f"Tool '{tool_name}' is DISABLED for user {user_id}, skipping.")
 
             for tool_info in tools_data:
                 tool_name = tool_info.get("name")
+                
+                # Skip disabled tools
+                if tool_name in disabled_tools:
+                    continue
+                    
                 description = tool_info.get("description", "No description provided.")
                 input_schema = tool_info.get("argument_schema")
                 pydantic_model = None

@@ -21,3 +21,5 @@ langchain_pinecone
 email-validator
 langchain-aws<0.2.0
 boto3
+langchain-openai
+langgraph

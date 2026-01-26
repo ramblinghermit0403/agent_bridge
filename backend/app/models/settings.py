@@ -22,6 +22,13 @@ class McpServerSetting(database.Base):
     is_active = Column(Boolean, default=True, nullable=False)
     description = Column(String, nullable=True)
     credentials = Column(String, nullable=True) # JSON string: {access_token, refresh_token, expiry, provider}
+    
+    # New columns for explicit auth details
+    client_id = Column(String, nullable=True)
+    client_secret = Column(String, nullable=True)
+    authorization_url = Column(String, nullable=True)
+    token_url = Column(String, nullable=True)
+    expires_at = Column(Integer, nullable=True) # Unix timestamp
 
     # Relationships
     tool_permissions = relationship("ToolPermission", back_populates="server_setting", cascade="all, delete-orphan")

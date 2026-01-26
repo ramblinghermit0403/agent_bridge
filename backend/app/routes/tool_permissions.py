@@ -7,11 +7,11 @@ from pydantic import BaseModel
 from ..database.database import get_db
 from ..models import ToolPermission, ToolApproval, McpServerSetting
 from ..auth.oauth2 import get_current_user
-from ..models.User import User
+from ..models.user import User
 import httpx
 from datetime import datetime, timedelta
-from ..services.Agent.mcp_connector import MCPConnector
-from ..core.preapproved_servers import preapproved_mcp_servers
+from app.services.mcp.connector import MCPConnector
+
 
 router = APIRouter(prefix="/api", tags=["tool-permissions"])
 
@@ -76,12 +76,12 @@ async def get_server_tools(
             except json.JSONDecodeError:
                 pass
 
-        # Lookup OAuth config from preapproved list
+        # Extract OAuth config from credentials
         oauth_config = None
+        if credentials and isinstance(credentials, dict):
+            oauth_config = credentials.get("oauth_config")
+            
         server_name = server_setting.server_name
-        server_info = next((s for s in preapproved_mcp_servers if s['server_name'] == server_name), None)
-        if server_info:
-            oauth_config = server_info.get('oauth_config')
 
         connector = MCPConnector(
             server_url=server_setting.server_url, 
@@ -94,6 +94,8 @@ async def get_server_tools(
         tools_data = await connector.list_tools()
         
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to fetch tools from server: {str(e)}")
     
     # Get user's tool permissions

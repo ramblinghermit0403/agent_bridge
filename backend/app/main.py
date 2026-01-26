@@ -1,10 +1,10 @@
 from fastapi import FastAPI, Request
 import nest_asyncio
-from .routes import agent,auth,user,settings,tool_permissions,tool_execution
+from .routes import agent,auth,user,settings,tool_permissions,tool_execution,providers
 from fastapi.middleware.cors import CORSMiddleware
 from .database import database
 from contextlib import asynccontextmanager
-from .services.Agent import langchain_agent
+
 
 
 # Models creation
@@ -56,9 +56,14 @@ app.include_router(user.router)
 app.include_router(settings.router)
 app.include_router(tool_permissions.router)
 app.include_router(tool_execution.router)
+app.include_router(providers.router)
 
 
 # CORS middleware configuration
+# CORS middleware configuration
+import os
+origins = os.getenv("BACKEND_CORS_ORIGINS", "http://localhost:5174").split(",")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from ..database.database import get_db
 from ..auth.oauth2 import get_current_user
 from ..models import User
-from ..services.tool_permissions_helper import PendingApproval, save_tool_approval
+from app.services.security.permissions import check_tool_permission, save_tool_approval, PendingApproval
 
 router = APIRouter(prefix="/api/tool-execution", tags=["tool-execution"])
 

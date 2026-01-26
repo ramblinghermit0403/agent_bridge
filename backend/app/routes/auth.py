@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from ..schemas import JWTtoken_schema, user
+from ..schemas import jwt_token_schema, user
 from ..models import User
 from ..database import database
 from ..auth.hashing import Hash
 from ..auth.oauth2 import get_current_user
-from ..auth import JWTtoken
+from ..auth import jwt_token
 from fastapi.security import OAuth2PasswordRequestForm
 
 router = APIRouter(tags=["Auth"])
@@ -62,7 +62,8 @@ async def login(request: OAuth2PasswordRequestForm = Depends(), db: AsyncSession
     if not Hash.verify(request.password, user.password_hash):
         raise HTTPException(status_code=400, detail="Invalid password")
 
-    access_token = JWTtoken.create_access_token(data={"sub": user.email})
+    access_token = jwt_token.create_access_token(
+        data={"sub": user.email})
 
     return {"access_token": access_token, "token_type": "bearer"}
 
@@ -88,7 +89,7 @@ async def login_guest(db: AsyncSession = Depends(database.get_db)):
     
     # Generate token (Guest tokens valid for 30 days)
     from datetime import timedelta
-    access_token = JWTtoken.create_access_token(
+    access_token = jwt_token.create_access_token(
         data={"sub": guest_email},
         expires_delta=timedelta(days=30) 
     )

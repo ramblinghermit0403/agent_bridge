@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.security import OAuth2PasswordBearer
 
 from jwt.exceptions import PyJWTError
-from ..schemas import JWTtoken_schema, user
+from ..schemas import jwt_token_schema, user
 from ..models import User
 from ..database import database
 from sqlalchemy.future import select
@@ -12,7 +12,7 @@ router = APIRouter()
 
 SECRET_KEY = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 1440 # 24 hours
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
@@ -33,7 +33,7 @@ async def get_current_user(
         if email is None:
             raise credentials_exception
         
-        token_data = JWTtoken_schema.TokenData(email=email)
+        token_data = jwt_token_schema.TokenData(email=email)
     except PyJWTError:
         raise credentials_exception
     

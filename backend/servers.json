@@ -1,0 +1,22 @@
+{
+  "presets": {
+    "Notion": {
+      "server_url": "https://mcp.notion.com/mcp",
+      "description": "Official Notion MCP Server.",
+      "requires_oauth": true,
+      "authorization_url": "",
+      "token_url": "",
+      "scope": "",
+      "show_advanced": false
+    },
+    "GitHub": {
+      "server_url": "https://api.githubcopilot.com/mcp/",
+      "description": "Official GitHub MCP Server.",
+      "requires_oauth": true,
+      "authorization_url": "https://github.com/login/oauth",
+      "token_url": "",
+      "scope": "",
+      "show_advanced": false
+    }
+  }
+}

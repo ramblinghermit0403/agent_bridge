@@ -10,6 +10,11 @@ class McpServerSettingCreate(BaseModel):
     server_url: str
     is_active: bool = True
     description: Optional[str] = None
+    client_id: Optional[str] = None
+    client_secret: Optional[str] = None
+    authorization_url: Optional[str] = None
+    token_url: Optional[str] = None
+    expires_at: Optional[int] = None
 
 # A plausible definition for McpServerSettingUpdate
 # This model uses Optional fields so a PATCH request can update only specific fields
@@ -18,6 +23,11 @@ class McpServerSettingUpdate(BaseModel):
     server_url: Optional[str] = None
     is_active: Optional[bool] = None
     description: Optional[str] = None
+    client_id: Optional[str] = None
+    client_secret: Optional[str] = None
+    authorization_url: Optional[str] = None
+    token_url: Optional[str] = None
+    expires_at: Optional[int] = None
 
 # A plausible definition for McpServerSettingRead with id and user_id
 # This Pydantic model is used for the response body.

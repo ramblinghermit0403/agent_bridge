@@ -27,4 +27,5 @@ dependencies = [
     "sqlalchemy>=2.0.45",
     "sse-starlette>=3.0.4",
     "uvicorn>=0.40.0",
+    "langchain-openai>=0.1.0",
 ]
