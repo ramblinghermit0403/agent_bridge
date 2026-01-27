@@ -85,17 +85,26 @@ async def human_review_node(state: AgentState, config: RunnableConfig):
                     elif data['approved'] is True:
                         approved_tools.append((tool_name, tool_id, pid))
                         # Keep approved ones for tool execution, clean up after
+                    elif data['approved'] is None:
+                         # CRITICAL FIX: If it's still pending (not explicitly approved), BLOCK IT.
+                         # This happens if the user approved Tool A but left Tool B pending in the same turn.
+                         logger.warning(f"Blocking execution of pending tool {tool_name}")
+                         denied_tools.append((tool_name, tool_id, pid))
+                         # We do NOT remove it, so it stays pending? 
+                         # Actually, if we block it now, the agent will see "Error: Pending".
+                         # The user likely moved on. It's safer to just kill the request.
+                         PendingApproval.remove(pid)
                     break
         
-        # If any tools were denied, inject ToolMessage with error
+        # If any tools were denied (or still pending), inject ToolMessage with error
         if denied_tools:
             new_messages = []
             for tool_name, tool_id, pid in denied_tools:
-                logger.info(f"Tool {tool_name} was DENIED by user")
+                logger.info(f"Tool {tool_name} was DENIED/BLOCKED by user")
                 # Create a fake ToolMessage response indicating denial
                 new_messages.append(
                     ToolMessage(
-                        content=f"Error: User denied permission to execute tool '{tool_name}'. Do not retry this tool.",
+                        content=f"Error: User did not approve execution of tool '{tool_name}'.",
                         tool_call_id=tool_id,
                         name=tool_name
                     )
@@ -130,6 +139,11 @@ async def route_tools(state: AgentState, config: RunnableConfig) -> str:
         async with AsyncSessionLocal() as db:
             for tool_call in tool_calls:
                 tool_name = tool_call["name"]
+                
+                # skip meta-tools
+                if tool_name == "search_tools":
+                    continue
+                    
                 # The tool name might be 'server_tool', we need to check effectively.
                 # Our check_tool_approval mainly needs the tool name suffix if generic, 
                 # but let's pass the full name.
@@ -146,8 +160,7 @@ async def route_tools(state: AgentState, config: RunnableConfig) -> str:
                 if needs_approval and approval_type != 'always':
                     requires_approval = True
                     
-                    # CRITICAL FIX: Create the PendingApproval record so the API/Frontend knows to ask the user.
-                    # Without this, the graph pauses, but the user receives no notification.
+                    # Create the PendingApproval record
                     approval_id = PendingApproval.create(
                         user_id=user_id,
                         tool_name=tool_name,
@@ -156,11 +169,8 @@ async def route_tools(state: AgentState, config: RunnableConfig) -> str:
                     )
                     logger.info(f"Blocking tool {tool_name} for approval. Created PendingApproval ID: {approval_id}")
                     
-                    # We can break early if we just want to stop at the first roadblock
-                    # logic-wise, we need to approve 'all' or 'one by one'.
-                    # The current flow pauses execution completely, so valid to stop here.
-                    break
-    
+                    # We continue loop to create approval requests for ALL tools in this turn
+                    
     if requires_approval:
         return "human_review"
     else:
@@ -200,9 +210,46 @@ def create_graph_agent(llm, tools, prompt, model_provider="gemini"):
         """
         logger.info(f"agent_node: Entering with {len(state['messages'])} messages")
         
+        # Check if previous message was from 'search_tools' and update available tools if so
+        # This requires the agent to have access to the registry, which we will inject via 'tools' context or similar.
+        # For now, we assume 'tools' passed to this function are the *initial* tools.
+        # To support dynamic tools, we'd need to store them in State or fetch from Registry here.
+        
+        # Extended logic for Dynamic Tool Binding:
+        # If we have a tool registry in config/kwargs (we need to pass it), we can use it.
+        # Let's assume we bind the tools passed in.
+        
+        # Check for tool_registry in config
+        tool_registry = config.get("configurable", {}).get("tool_registry")
+        current_tools = list(tools) # Copy initial tools
+        
+        if tool_registry:
+            # Check if last message was a tool output from "search_tools"
+            last_msg = state["messages"][-1]
+            if isinstance(last_msg, ToolMessage) and last_msg.name == "search_tools":
+                 # Parse the output to get tool names
+                 try:
+                     import json
+                     # The output is a list of dicts: [{"name":...}, ...]
+                     # But it might be varying format depending on LLM.
+                     # The tool returns a list of dicts.
+                     found_tools_data = json.loads(last_msg.content)
+                     if isinstance(found_tools_data, list):
+                         for t_data in found_tools_data:
+                             t_name = t_data.get("name")
+                             t_inst = tool_registry.get_tool(t_name)
+                             if t_inst:
+                                 current_tools.append(t_inst)
+                         logger.info(f"Dynamically added tools: {[t.name for t in current_tools if t not in tools]}")
+                 except Exception as e:
+                     logger.error(f"Failed to parse search_tools output: {e}")
+
         # Bind tools to LLM
-        logger.info(f"agent_node: Binding {len(tools)} tools to LLM: {[t.name for t in tools[:3]]}...")
-        llm_with_tools = llm.bind_tools(tools)
+        # Add search_tools if not present and registry is available? 
+        # Actually search_tools should be in the initial 'tools' list if enabled.
+        
+        logger.info(f"agent_node: Binding {len(current_tools)} tools to LLM...")
+        llm_with_tools = llm.bind_tools(current_tools)
         
         # Run chain
         chain = prompt | llm_with_tools
@@ -283,10 +330,11 @@ class GraphAgentExecutor:
     Wraps the compiled graph to mimic the AgentExecutor interface
     used by the rest of the application.
     """
-    def __init__(self, graph, checkpointer=None, thread_id="default"):
+    def __init__(self, graph, checkpointer=None, thread_id="default", tool_registry=None):
         self.graph = graph
         self.checkpointer = checkpointer
         self.thread_id = thread_id
+        self.tool_registry = tool_registry
         
     async def invoke(self, input_dict: Dict[str, Any], config: Optional[RunnableConfig] = None) -> Dict[str, Any]:
         """
@@ -312,6 +360,10 @@ class GraphAgentExecutor:
         # Ensure thread_id is present for persistence
         if "thread_id" not in run_config["configurable"]:
             run_config["configurable"]["thread_id"] = self.thread_id
+            
+        # Inject tool_registry if available
+        if self.tool_registry:
+            run_config["configurable"]["tool_registry"] = self.tool_registry
             
         # Invoke graph
         # Note: This is a synchronous-looking call but valid for async usage if awaited?
@@ -352,6 +404,10 @@ class GraphAgentExecutor:
         
         if "thread_id" not in run_config["configurable"]:
             run_config["configurable"]["thread_id"] = self.thread_id
+            
+        # Inject tool_registry if available
+        if self.tool_registry:
+            run_config["configurable"]["tool_registry"] = self.tool_registry
             
         logger.info("--- Executing via LangGraph Agent (Streaming) ---")
         

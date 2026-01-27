@@ -17,6 +17,7 @@ def get_gemini_llm(model_name: str = "gemini-2.5-flash", temperature: float = 0)
     Creates and returns a ChatGoogleGenerativeAI instance.
     """
     api_key = os.getenv("GOOGLE_API_KEY")
+    print(f"DEBUG: Using Gemini API Key: {api_key}", flush=True) # Debug print
     if not api_key:
         logger.warning("GOOGLE_API_KEY not found in environment")
         

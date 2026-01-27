@@ -263,4 +263,51 @@ async def delete_tool_approval(
     await db.delete(approval)
     await db.commit()
     
+    await db.commit()
+    
     return {"message": f"Approval for {tool_name} removed"}
+
+@router.get("/tool-approvals/pending")
+async def get_pending_approvals(current_user: User = Depends(get_current_user)):
+    """
+    Get all pending tool approvals for the current user.
+    """
+    from app.services.security.permissions import PendingApproval
+    
+    pending_list = []
+    # Iterate over copy of item to avoid modification error
+    for pid, data in list(PendingApproval._pending.items()):
+        if data['user_id'] == current_user.id:
+            # Only return actual pending items (approved is None)
+            if data['approved'] is None:
+                pending_list.append({
+                    "id": pid,
+                    "tool_name": data['tool_name'],
+                    "server_name": data['server_name'],
+                    "tool_input": data['tool_input'],
+                    "created_at": data['created_at'].isoformat() if data.get('created_at') else None
+                })
+    
+    return pending_list
+
+@router.post("/tool-approvals/pending/{approval_id}")
+async def resolve_pending_approval(
+    approval_id: str,
+    resolution: ToolToggleRequest, # Re-using this model: is_enabled=True -> Approve, False -> Deny
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Approve or Deny a pending request.
+    """
+    from app.services.security.permissions import PendingApproval
+    
+    pending = PendingApproval.get(approval_id)
+    if not pending or pending['user_id'] != current_user.id:
+        raise HTTPException(status_code=404, detail="Pending approval not found")
+        
+    if resolution.is_enabled:
+        PendingApproval.approve(approval_id)
+    else:
+        PendingApproval.deny(approval_id)
+        
+    return {"message": f"Approval {approval_id} resolved to {resolution.is_enabled}"}

@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv(override=True)
+
 from fastapi import FastAPI, Request
 import nest_asyncio
 from .routes import agent,auth,user,settings,tool_permissions,tool_execution,providers

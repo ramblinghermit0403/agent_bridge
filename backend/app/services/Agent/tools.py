@@ -15,8 +15,18 @@ class ToolException(Exception):
 def create_tool_func(tool_name: str, connector, pydantic_model=None, user_id: str=None, unique_tool_name: str=None, blocking: bool = True):
     """
     Creates the asynchronous and synchronous functions that the LangChain tool will wrap.
-    Includes permission checking logic.
+    Includes permission checking logic and retry mechanism.
     """
+    from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+
+    # Define retry strategy: exponential backoff, max 3 attempts
+    # We retry on specific exceptions that might be transient
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type((TimeoutError, ConnectionError)), # Add more if needed
+        reraise=True
+    )
     async def async_func(*args, **kwargs):
         # Handle positional argument if passed (sometimes happens with single-input tools)
         if args:
@@ -102,6 +112,10 @@ def _sanitize_schema(schema: Any) -> Any:
             if key in new_schema:
                 del new_schema[key]
         
+        # FIX: Gemini requires 'items' for type: array
+        if new_schema.get("type") == "array" and "items" not in new_schema:
+            new_schema["items"] = {"type": "string"}
+
         # Recurse for nested dictionaries (e.g. properties)
         for k, v in new_schema.items():
             new_schema[k] = _sanitize_schema(v)
@@ -181,7 +195,17 @@ async def build_tools_from_servers(user_mcp_servers: Dict[str, Dict[str, Any]], 
                             prop_type_str = prop_info.get("type", "string")
                             
                             if prop_type_str == "array":
-                                python_type = List[Any]
+                                items_type = prop_info.get("items", {}).get("type", "string")
+                                if items_type == "object":
+                                    python_type = List[Dict[str, Any]]
+                                elif items_type == "integer":
+                                    python_type = List[int]
+                                elif items_type == "number":
+                                    python_type = List[float]
+                                elif items_type == "boolean":
+                                    python_type = List[bool]
+                                else:
+                                    python_type = List[str]
                             elif prop_type_str == "object":
                                 python_type = Dict[str, Any]
                             elif prop_type_str == "integer":
@@ -232,3 +256,25 @@ async def build_tools_from_servers(user_mcp_servers: Dict[str, Dict[str, Any]], 
             logger.error(f"Skipping tools for server '{server_name}' due to connection error: {e}")
             continue
     return built_tools
+
+def create_tool_search_tool(tool_registry: Any, user_id: str):
+    """
+    Creates a tool that allows the agent to search for other tools.
+    """
+    class ToolSearchInput(BaseModel):
+        query: str = Field(..., description="The search query to find relevant tools.")
+    
+    async def search_tools_func(query: str):
+        tools = tool_registry.search(query, limit=5)
+        return [
+            {"name": t.name, "description": t.description} 
+            for t in tools
+        ]
+
+    return StructuredTool.from_function(
+        func=lambda query: tool_registry.search(query, limit=5), # sync fallback
+        coroutine=search_tools_func,
+        name="search_tools",
+        description="Search for available tools based on a query. Use this to find tools that can help you verify your task.",
+        args_schema=ToolSearchInput
+    )

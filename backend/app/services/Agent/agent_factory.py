@@ -45,7 +45,19 @@ async def create_final_agent_pipeline(
 
     logger.info(f"Agent created with {len(all_tools)} tools: {[t.name for t in all_tools]}")
 
-    # 3. Create LangGraph Agent
+    # 3. Initialize Tool Registry & Search Tool
+    from .tool_registry import ToolRegistry
+    from .tools import create_tool_search_tool
+    
+    tool_registry = ToolRegistry()
+    tool_registry.register_tools(all_tools)
+    
+    search_tool = create_tool_search_tool(tool_registry, user_id)
+    
+    # Add search tool to the list of tools available to the agent
+    all_tools.append(search_tool)
+
+    # 4. Create LangGraph Agent
     from .agent_orchestrator import create_graph_agent, GraphAgentExecutor
     from langgraph.checkpoint.memory import MemorySaver
     
@@ -63,7 +75,7 @@ async def create_final_agent_pipeline(
     app = graph.compile(checkpointer=checkpointer, interrupt_before=["human_review"])
     
     # Wrap in compatibility layer
-    agent_executor = GraphAgentExecutor(app, checkpointer=checkpointer)
+    agent_executor = GraphAgentExecutor(app, checkpointer=checkpointer, tool_registry=tool_registry)
     logger.info("Successfully created LangGraph agent.")
     
     return agent_executor

@@ -164,7 +164,6 @@ async def stream_agent_events(
                  })}
                  
                  await asyncio.sleep(0.1)
-                 break
 
     except ResourceExhausted:
         logger.warning(f"Gemini quota exceeded for session {hybrid_session_key}.")

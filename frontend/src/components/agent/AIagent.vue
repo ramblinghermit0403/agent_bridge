@@ -58,10 +58,19 @@
         </div>
 
       </div>
+
+      <!-- Subtle In-Stream Waiting Indicator -->
+      <div v-if="isWaitingForApproval" class="message-row justify-start fade-in">
+         <div class="waiting-indicator-subtle">
+             <span class="animate-pulse">Waiting for your approval...</span>
+         </div>
+      </div>
+
     </div>
 
     <div class="input-area-container" :class="{ 'centered': messages.length === 0 && !isTyping && !isAgentProcessing }">
       <div class="centered-content">
+
         <div v-if="messages.length === 0 && !isTyping && !isAgentProcessing" class="greeting-wrapper">
             <h1 class="greeting-line-1"><span class="greeting-icon">✨</span> Hi {{ userName || 'there' }}</h1>
             <h2 class="greeting-line-2">Ready to make some magic?</h2>
@@ -134,6 +143,9 @@ export default {
   },
 
   computed: {
+    isWaitingForApproval() {
+        return this.messages.some(m => m.role === 'permission_request');
+    },
     sessionId() {
       return this.$route.query.session || null;
     }
@@ -367,8 +379,11 @@ export default {
         this.toast.error("Failed to approve tool execution");
       }
       
-      // Auto-resume generation
-      this.resumeGeneration();
+      // Auto-resume generation ONLY if no more permission requests are pending
+      const pendingRequests = this.messages.filter(m => m.role === 'permission_request');
+      if (pendingRequests.length === 0) {
+          this.resumeGeneration();
+      }
     },
 
     async handleToolDenial(data, index) {
@@ -397,8 +412,11 @@ export default {
         this.toast.error("Failed to deny tool execution");
       }
       
-      // Auto-resume generation (agent will see tool as denied and handle error)
-      this.resumeGeneration();
+      // Auto-resume generation ONLY if no more permission requests are pending
+      const pendingRequests = this.messages.filter(m => m.role === 'permission_request');
+      if (pendingRequests.length === 0) {
+          this.resumeGeneration();
+      }
     },
 
     async resumeGeneration() {
@@ -792,4 +810,24 @@ kbd { background-color: rgba(255, 255, 255, 0.2); border-radius: 4px; border: 1p
 .scratchpad-area summary { font-weight: 600; color: var(--text-primary); list-style: inside; }
 .scratchpad-content { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed var(--border-color); white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow-y: auto; scrollbar-width: thin; }
 .scratchpad-line { margin-bottom: 0.25rem; color: var(--text-secondary); }
+
+.waiting-indicator-subtle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    padding: 0.5rem 0.25rem;
+    font-style: italic;
+    opacity: 0.8;
+}
+
+.fade-in {
+    animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
 </style>
