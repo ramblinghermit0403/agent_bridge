@@ -14,7 +14,7 @@
           <li class="nav-heading">User</li>
           <li><a href="#" @click.prevent="setActiveCategory('profile')" :class="{ active: activeCategory === 'profile' }"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>Profile</a></li>
           <li class="nav-heading">Application</li>
-          <li><a href="#" @click.prevent="setActiveCategory('appearance')" :class="{ active: activeCategory === 'appearance' }"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg>Appearance</a></li>
+
           <li><a href="#" @click.prevent="setActiveCategory('connections')" :class="{ active: activeCategory === 'connections' }"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>Connections</a></li>
 
         </ul>
@@ -55,36 +55,14 @@
         <!-- ==== END UPDATED PROFILE SECTION ==== -->
 
         <!-- UNCHANGED APPEARANCE SECTION -->
-        <div v-if="activeCategory === 'appearance'" class="settings-group">
-          <div class="setting-item">
-            <div class="setting-info">
-              <label class="setting-label">UI Theme</label>
-              <p class="setting-description">The theme toggle is available globally in the header.</p>
-            </div>
-            <div class="setting-control">
-              <p class="setting-description">Use <svg xmlns="http://www.w3.org/2000/svg" style="display:inline-block; vertical-align: sub;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg> / <svg xmlns="http://www.w3.org/2000/svg" style="display:inline-block; vertical-align: sub;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg> in top right.</p>
-            </div>
-          </div>
-          <div class="setting-item">
-            <div class="setting-info">
-              <label class="setting-label">Compact UI</label>
-              <p class="setting-description">Reduce padding and margins for a denser interface.</p>
-            </div>
-            <div class="setting-control">
-              <label class="toggle-switch">
-                <input type="checkbox" v-model="compactUiEnabled">
-                <span class="slider"></span>
-              </label>
-            </div>
-          </div>
-        </div>
+
 
         <!-- UNCHANGED CONNECTIONS SECTION -->
         <div v-if="activeCategory === 'connections'" class="settings-group">
           <h3>MCP Server Connections</h3>
           <p class="setting-description">Manage your stored Modern Context Protocol (MCP) server configurations. These are typically HTTP(S) endpoints for Server-Sent Events (SSE).</p>
-          <div v-if="mcpServerSettings.length > 0">
-            <div v-for="setting in mcpServerSettings" :key="setting.id" class="setting-item connection-item">
+          <div v-if="mcpServerSettings.length > 0" style="max-height: 400px; overflow-y: auto; border-radius: 8px; margin-bottom: 2rem;">
+            <div v-for="setting in mcpServerSettings" :key="setting.id" class="setting-item connection-item" style="padding: 1rem; border-bottom: 1px solid var(--border-color);">
               <div class="setting-info">
                 <label class="setting-label">{{ setting.server_name }}</label>
                 <p class="setting-description">{{ setting.server_url }}</p>
@@ -92,7 +70,10 @@
               </div>
               <div class="setting-control">
                 <button @click="openConfigModal(setting)" class="form-button small-button">Configure</button>
-                <button @click="reconnectServer(setting)" class="form-button small-button secondary-button" style="margin-right: 0.5rem;" title="Verify connection & refresh tokens">Reconnect</button>
+                <button @click="reconnectServer(setting)" :disabled="reconnectingServerId === setting.id" class="form-button small-button secondary-button" style="margin-right: 0.5rem; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 100px;" title="Verify connection & refresh tokens">
+                  <svg v-if="reconnectingServerId === setting.id" class="spin" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg>
+                  <span v-else>Reconnect</span>
+                </button>
                 <button @click="deleteSetting(setting.id)" class="form-button small-button secondary-button">Delete</button>
                 <label class="toggle-switch" style="margin-left: 0.5rem;"><input type="checkbox" v-model="setting.is_active" @change="toggleSettingActive(setting)"><span class="slider"></span></label>
               </div>
@@ -101,12 +82,12 @@
           <p v-else class="setting-description" style="margin-top: 1rem;">No MCP server connections saved yet.</p>
           <hr class="settings-divider">
           
-          <hr class="settings-divider">
+
           
           <h3>Add New MCP Server</h3>
           
            <!-- Presets Dropdown -->
-          <div class="setting-item" style="background: var(--bg-secondary); border-radius: 8px; padding: 10px 15px; margin-bottom: 20px;">
+          <div class="setting-item" style="background: var(--bg-secondary); border-radius: 8px; padding: 10px 15px; margin-bottom: 20px; border: none;">
              <div class="setting-info" style="border:none;"><label class="setting-label" style="display:flex; align-items:center; gap:8px;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg> Load Preset</label><p class="setting-description">Autofill settings for popular providers.</p></div>
              <div class="setting-control">
                 <select @change="applyPreset($event.target.value)" class="form-input" style="cursor: pointer;">
@@ -115,21 +96,21 @@
                 </select>
              </div>
           </div>
-          <div class="setting-item">
+          <div class="setting-item" style="border-bottom: none; padding: 0.75rem 0;">
             <div class="setting-info"><label for="newServerName" class="setting-label">Server Name</label><p class="setting-description">A friendly, unique name for this connection (e.g., "My Dev MCP").</p></div>
             <div class="setting-control"><input type="text" id="newServerName" v-model="newMcpServer.server_name" class="form-input"></div>
           </div>
-          <div class="setting-item">
+          <div class="setting-item" style="border-bottom: none; padding: 0.75rem 0;">
             <div class="setting-info"><label for="newMcpServerUrl" class="setting-label">MCP Server URL</label><p class="setting-description">The HTTP(S) endpoint for the Modern Context Protocol (SSE) server.</p></div>
             <div class="setting-control"><input type="text" id="newMcpServerUrl" v-model="newMcpServer.server_url" class="form-input"></div>
           </div>
-          <div class="setting-item">
+          <div class="setting-item" style="border-bottom: none; padding: 0.75rem 0;">
             <div class="setting-info"><label for="newServerDescription" class="setting-label">Description (Optional)</label><p class="setting-description">Brief notes about this server or its purpose.</p></div>
             <div class="setting-control"><input type="text" id="newServerDescription" v-model="newMcpServer.description" class="form-input"></div>
           </div>
           
           <!-- Custom OAuth Options -->
-          <div class="setting-item">
+          <div class="setting-item" style="border-bottom: none; padding: 0.75rem 0;">
             <div class="setting-info">
               <label class="setting-label">Requires OAuth?</label>
               <p class="setting-description">Enable if this server requires OAuth 2.0 authentication (e.g., custom remote servers).</p>
@@ -188,9 +169,9 @@
           </div>
 
           <div class="setting-item save-section">
-            <button v-if="!newMcpServer.requires_oauth" @click="testNewConnection" class="form-button secondary-button">Test Connection</button>
-            <button @click="saveNewConnection" class="form-button primary-button">
-                 {{ newMcpServer.requires_oauth ? 'Authenticate & Connect' : 'Save Connection' }}
+            <button @click="saveNewConnection" :disabled="isTestingConnection" class="form-button primary-button" style="display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 140px;">
+                <svg v-if="isTestingConnection" class="spin" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg>
+                <span v-else>{{ newMcpServer.requires_oauth ? 'Authenticate & Connect' : 'Test & Save Connection' }}</span>
             </button>
           </div>
         </div>
@@ -201,30 +182,42 @@
         <!-- AUTH MODAL -->
         <div v-if="showAuthModal" class="modal-overlay">
           <div class="modal-content">
-            <h3 class="modal-title">Connect to {{ authConfig.server?.server_name }}</h3>
+            <h3 class="modal-title">{{ authConfig.server?.id ? 'Reconnect to' : 'Connect to' }} {{ authConfig.server?.server_name }}</h3>
             <p class="setting-description" style="margin-bottom: 1.5rem;">
-              To connect securely, you need to provide your OAuth credentials. 
-              The app will then open a popup to authenticate you with {{ authConfig.server?.server_name }}.
+              {{ authConfig.server?.id 
+                 ? `Your session for ${authConfig.server?.server_name} has expired. Please re-authenticate to continue.`
+                 : `The app will open a popup to authenticate you with ${authConfig.server?.server_name}.` 
+              }}
             </p>
             
             <div v-if="!authConfig.usingSharedId">
-                <div class="setting-item" style="border:none; padding: 0.5rem 0;">
-                    <div class="setting-info" style="padding:0;"><label>Client ID</label></div>
-                    <div class="setting-control" style="width: 100%;"><input type="text" v-model="authConfig.client_id" class="form-input" :placeholder="`Enter Client ID from your Public ${authConfig.server?.server_name} App`"></div>
+                <!-- If we have a pre-filled ID, show summary state by default -->
+                <div v-if="authConfig.client_id && !authConfig.isEditingId" style="background: var(--bg-secondary); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <span class="setting-label" style="display:block; font-size: 0.8em; color: var(--text-secondary);">Using Client ID</span>
+                            <code style="font-size: 1em; color: var(--text-primary);">{{ authConfig.client_id }}</code>
+                        </div>
+                        <button @click="authConfig.isEditingId = true" class="footer-btn secondary" style="padding: 4px 8px; font-size: 0.8em;">Change</button>
+                    </div>
                 </div>
-                
-                <p class="setting-description small-text" style="background: rgba(0,0,0,0.03); padding: 8px; border-radius: 4px;">
-                    <strong>Why?</strong> The OAuth protocol requires an ID to identify which app is asking for permission. 
-                    Since this is a custom client, you need your own ID. 
-                    <br><br>
-                    Create an OAuth app in the <strong>{{ authConfig.server?.server_name }}</strong> Developer settings.
-                </p>
+
+                <!-- Editable State -->
+                <div v-else>
+                    <div class="setting-item" style="border:none; padding: 0.5rem 0;">
+                        <div class="setting-info" style="padding:0;"><label>Client ID</label></div>
+                        <div class="setting-control" style="width: 100%;"><input type="text" v-model="authConfig.client_id" class="form-input" :placeholder="`Enter Client ID`"></div>
+                    </div>
+                    
+                    <p class="setting-description small-text" style="background: rgba(0,0,0,0.03); padding: 8px; border-radius: 4px;">
+                        <strong>Why?</strong> Custom connections require your own Client ID from the provider's developer settings.
+                    </p>
+                </div>
             </div>
             <div v-else>
                  <p class="setting-description" style="background: rgba(0,255,0,0.05); padding: 1rem; border-radius: 8px; text-align: center;">
-                    <strong>Managed Authentication is Active</strong><br>
-                    This server is pre-configured with a shared Client ID.<br>
-                    Just click below to connect.
+                    <strong>Managed Authentication</strong><br>
+                    Server-provided ID active.
                  </p>
             </div>
             
@@ -265,6 +258,7 @@
       :isActive="configServer?.is_active"
       @close="closeConfigModal"
       @update-server="handleServerUpdate"
+      @reauth-needed="handleReauthNeeded"
     />
   </div>
 </template>
@@ -284,11 +278,13 @@ const profileForm = reactive({ username: '', email: '' });
 // Removed local profileMessage/isProfileError as we use toast now
 
 // --- Appearance State ---
-const compactUiEnabled = ref(false);
+
 
 // --- Connections State ---
 const mcpServerSettings = ref([]);
 const preapprovedServers = ref([]);
+const isTestingConnection = ref(false);
+const reconnectingServerId = ref(null); // Track which server is reconnecting
 
 
 // --- Tool Approvals State ---
@@ -410,6 +406,7 @@ const fetchPreapprovedServers = async () => {
 
 const testNewConnection = async () => {
   if (!newMcpServer.server_url) { toast.warning('Please enter a server URL.'); return; }
+  isTestingConnection.value = true;
   try {
     const res = await fetch(`${BACKEND_BASE_URL}/api/mcp/test-connection`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ server_url: newMcpServer.server_url }),
@@ -418,10 +415,28 @@ const testNewConnection = async () => {
     if (res.ok) toast.success(`Success: ${data.message}`);
     else toast.error(`Failed: ${data.detail}`);
   } catch (e) { toast.error(`Error: ${e.message}`); }
+  finally { isTestingConnection.value = false; }
 };
 
 const saveNewConnection = async () => {
   if (!newMcpServer.server_name || !newMcpServer.server_url) { toast.warning('Please provide a server name and URL.'); return; }
+  
+  try {
+     new URL(newMcpServer.server_url);
+  } catch (_) {
+     toast.error("Please enter a valid URL (e.g., http://localhost:8000/sse)");
+     return;
+  }
+  
+  // Check for duplicates (Frontend check)
+  const isDuplicate = mcpServerSettings.value.some(s => 
+      s.server_name === newMcpServer.server_name || 
+      (s.server_url === newMcpServer.server_url && s.server_url !== '')
+  );
+  if (isDuplicate) {
+      toast.error("Duplicate Error: A server with this name or URL already exists.");
+      return;
+  }
   
   // Custom OAuth Flow
   if (newMcpServer.requires_oauth) {
@@ -491,14 +506,17 @@ const saveNewConnection = async () => {
   }
 
   const headers = getAuthHeaders(); if (!headers) return;
+  
+  isTestingConnection.value = true;
   try {
     const res = await fetch(`${BACKEND_BASE_URL}/api/mcp/settings/`, { method: 'POST', headers, body: JSON.stringify(newMcpServer) });
     if (res.ok) {
       const saved = await res.json();
-      toast.success('Connection saved!'); mcpServerSettings.value.push(saved);
+      toast.success('Connection verified & saved!'); mcpServerSettings.value.push(saved);
       Object.assign(newMcpServer, { server_name: '', server_url: '', is_active: true, description: '', requires_oauth: false, client_id: '', client_secret: '', scope: '' });
     } else { const e = await res.json(); toast.error(`Save failed: ${e.detail}`); }
   } catch (e) { toast.error(`Error: ${e.message}`); }
+  finally { isTestingConnection.value = false; }
 };
 
 const toggleSettingActive = async (setting) => {
@@ -523,10 +541,18 @@ const deleteSetting = async (settingId) => {
 
 const reconnectServer = async (setting) => {
   const headers = getAuthHeaders(); if (!headers) return;
+  reconnectingServerId.value = setting.id;
   toast.info(`Reconnecting to ${setting.server_name}...`);
   try {
     const res = await fetch(`${BACKEND_BASE_URL}/api/mcp/settings/${setting.id}/reconnect`, { method: 'POST', headers });
     const data = await res.json();
+    
+    if (res.status === 401 && data.code === 'auth_required') {
+        toast.error(`Session expired: ${data.detail}`);
+        handleReauthNeeded(setting.id);
+        return;
+    }
+
     if (res.ok) {
         toast.success(data.message);
     } else {
@@ -534,6 +560,8 @@ const reconnectServer = async (setting) => {
     }
   } catch (e) {
       toast.error(`Error: ${e.message}`);
+  } finally {
+      reconnectingServerId.value = null;
   }
 };
 
@@ -546,7 +574,8 @@ const authConfig = reactive({
   server: null,
   client_id: '', // User needs to provide this
   client_secret: '',
-  usingSharedId: false
+  usingSharedId: false,
+  isEditingId: false
 });
 
 const showToolsModal = ref(false);
@@ -571,6 +600,16 @@ const handleServerUpdate = () => {
   fetchMcpServerSettings();
 };
 
+const handleReauthNeeded = (serverId) => {
+  const server = mcpServerSettings.value.find(s => s.id === serverId);
+  if (server) {
+      // Close the config modal first
+      closeConfigModal();
+      // Open the auth modal for this server
+      openAuthModal(server);
+  }
+};
+
 
 const openAuthModal = (server) => {
   authConfig.server = server;
@@ -591,7 +630,8 @@ const openAuthModal = (server) => {
       authConfig.client_id = sharedId;
       authConfig.usingSharedId = true;
   } else {
-      authConfig.client_id = '';
+      // Use existing client_id if we are reconnecting a custom server
+      authConfig.client_id = server.client_id || '';
       authConfig.usingSharedId = false;
   }
   
@@ -620,8 +660,12 @@ const startOAuthFlow = async () => {
          headers,
          body: JSON.stringify({
              server_name: authConfig.server.server_name,
+             server_url: authConfig.server.server_url,
              client_id: authConfig.client_id,
-             client_secret: "", // Not used
+             client_secret: authConfig.server.client_secret || "", 
+             scope: authConfig.server.scope || "",
+             authorization_url: authConfig.server.authorization_url || "",
+             token_url: authConfig.server.token_url || "",
              redirect_uri: `${BACKEND_BASE_URL}/api/mcp/oauth/callback`
          })
      });
@@ -1124,6 +1168,13 @@ onMounted(() => {
 }
 .danger-button:hover {
   background-color: #dc2626 !important;
+}
+
+@keyframes spin { 
+  100% { transform: rotate(360deg); } 
+}
+.spin { 
+  animation: spin 1s linear infinite; 
 }
 
 .approval-badge {

@@ -9,6 +9,7 @@ class McpServerSettingCreate(BaseModel):
     server_name: str
     server_url: str
     is_active: bool = True
+    requires_oauth: bool = False
     description: Optional[str] = None
     client_id: Optional[str] = None
     client_secret: Optional[str] = None

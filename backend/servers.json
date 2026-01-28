@@ -13,7 +13,7 @@
       "server_url": "https://api.githubcopilot.com/mcp/",
       "description": "Official GitHub MCP Server.",
       "requires_oauth": true,
-      "authorization_url": "https://github.com/login/oauth",
+      "authorization_url": "",
       "token_url": "",
       "scope": "",
       "show_advanced": false

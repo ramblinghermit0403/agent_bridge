@@ -138,7 +138,7 @@ class MCPAuthService:
                 return None
 
     @classmethod
-    async def init_oauth_flow(cls, server_name: str, redirect_uri: str, client_id: Optional[str] = None, client_secret: Optional[str] = None, server_url: Optional[str] = None, scope: Optional[str] = None, authorization_url: Optional[str] = None, token_url: Optional[str] = None) -> str:
+    async def init_oauth_flow(cls, server_name: str, redirect_uri: str, client_id: Optional[str] = None, client_secret: Optional[str] = None, server_url: Optional[str] = None, scope: Optional[str] = None, authorization_url: Optional[str] = None, token_url: Optional[str] = None, setting_id: Optional[int] = None) -> str:
         
         if not server_url:
              raise HTTPException(status_code=400, detail="Server URL is required for connection.")
@@ -180,6 +180,7 @@ class MCPAuthService:
             "server_url": server_url,
             "server_name": server_name,
             "scope": final_scope,
+            "setting_id": setting_id,
             "code_verifier": code_verifier 
         }
         redis_client.setex(f"oauth_state:{state}", 600, json.dumps(state_data))
@@ -285,7 +286,8 @@ class MCPAuthService:
                 return {
                     "server_name": server_name,
                     "server_url": server_url,
-                    "credentials": credentials_json
+                    "credentials": credentials_json,
+                    "setting_id": stored_state.get("setting_id")
                 }
                    
             except HTTPException:

@@ -1,0 +1,58 @@
+/* Black & White Monotone Theme */
+
+:root {
+    /* Override VitePress brand colors with monotone */
+    --vp-c-brand-1: #1a1a1a;
+    --vp-c-brand-2: #333333;
+    --vp-c-brand-3: #4a4a4a;
+    --vp-c-brand-soft: rgba(0, 0, 0, 0.1);
+    
+    /* Hero section */
+    --vp-home-hero-name-color: #000000;
+    --vp-home-hero-name-background: none;
+    
+    /* Button colors */
+    --vp-button-brand-bg: #000000;
+    --vp-button-brand-hover-bg: #333333;
+    --vp-button-brand-active-bg: #1a1a1a;
+    --vp-button-alt-bg: #f5f5f5;
+    --vp-button-alt-hover-bg: #e0e0e0;
+    --vp-button-alt-border: #cccccc;
+    --vp-button-alt-text: #000000;
+}
+
+.dark {
+    /* Dark mode monotone */
+    --vp-c-brand-1: #ffffff;
+    --vp-c-brand-2: #e0e0e0;
+    --vp-c-brand-3: #cccccc;
+    --vp-c-brand-soft: rgba(255, 255, 255, 0.1);
+    
+    --vp-home-hero-name-color: #ffffff;
+    
+    --vp-button-brand-bg: #ffffff;
+    --vp-button-brand-hover-bg: #e0e0e0;
+    --vp-button-brand-active-bg: #cccccc;
+    --vp-button-brand-text: #000000;
+    --vp-button-alt-bg: #2a2a2a;
+    --vp-button-alt-hover-bg: #3a3a3a;
+    --vp-button-alt-border: #4a4a4a;
+}
+
+/* Hero name gradient override */
+.VPHero .name {
+    background: none !important;
+    -webkit-background-clip: unset !important;
+    background-clip: unset !important;
+    -webkit-text-fill-color: currentColor !important;
+}
+
+/* Feature cards - monotone borders */
+.VPFeature {
+    border-color: var(--vp-c-divider) !important;
+}
+
+/* Clean link styling */
+.VPLink {
+    color: inherit;
+}

@@ -20,6 +20,7 @@ For detailed configuration guides, please see:
 - [**Supported MCP Servers**](docs/MCP_SERVERS.md): Setup guide for Figma, GitHub, Notion, and custom servers.
 - [**Supported Providers**](docs/PROVIDERS.md): Configuration for Gemini, Pinecone, and AWS Bedrock.
 - [**Expansion Guide**](docs/EXPANSION.md): How to add new MCP servers, LLM providers, and features.
+- [**Prompts & Persona**](docs/PROMPTS.md): Customizing the agent's behavior and system prompts.
 
 
 
@@ -29,8 +30,9 @@ For detailed configuration guides, please see:
 
 ## 📁 Project Structure
 
+```text
 ai agent mcp/
-├── backend/                 # FastAPI backend server
+├── server/                 # FastAPI backend server
 │   ├── app/
 │   │   ├── routes/         # API endpoints
 │   │   ├── services/       # Business logic
@@ -42,7 +44,7 @@ ai agent mcp/
 │   ├── pyproject.toml      # Python dependencies (uv)
 │   └── requirements.txt    # Alternative pip dependencies
 │
-└── frontend/               # Vue.js frontend
+└── client/               # Vue.js frontend
     ├── src/
     │   ├── view/       # Vue pages
     │   ├── components/ # Reusable Vue components
@@ -65,9 +67,9 @@ ai agent mcp/
 
 ### Backend Setup
 
-1. **Navigate to the backend directory**
+1. **Navigate to the server directory**
    ```bash
-   cd backend
+   cd server
    ```
 
 2. **Install dependencies using uv (recommended)**
@@ -83,7 +85,7 @@ ai agent mcp/
 
 3. **Configure environment variables**
    
-   Create a `.env` file in the `backend` directory with the following:
+   Create a `.env` file in the `server` directory with the following:
    ```env
    # Database
    DATABASE_URL=postgresql://user:password@localhost:5432/agentbridge
@@ -117,9 +119,9 @@ ai agent mcp/
 
 ### Frontend Setup
 
-1. **Navigate to the frontend directory**
+1. **Navigate to the client directory**
    ```bash
-   cd frontend
+   cd client
    ```
 
 2. **Install dependencies**
@@ -144,7 +146,7 @@ ai agent mcp/
 1. **Ensure Docker and Docker Compose are installed.**
 
 2. **Configure environment variables:**
-   Copy `.env.example` to `.env` in both `backend/` and `frontend/AgentBridge/` directories and update the values.
+   Copy `.env.example` to `.env` in both `server/` and `client/AgentBridge/` directories and update the values.
 
 3. **Run the services:**
    ```bash
@@ -157,7 +159,7 @@ ai agent mcp/
 
 ### MCP Server Configuration
 
-To connect MCP servers, edit the `servers.json` file in the backend directory. Then run the bootstrap script:
+To connect MCP servers, edit the `servers.json` file in the server directory. Then run the bootstrap script:
 ```bash
 python bootstrap_servers.py your-email@example.com
 ```

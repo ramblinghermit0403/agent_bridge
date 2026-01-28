@@ -96,7 +96,7 @@ const props = defineProps({
   isActive: Boolean
 });
 
-const emit = defineEmits(['close']);
+const emit = defineEmits(['close', 'reauth-needed']);
 
 const toast = useToast();
 const tools = ref([]);
@@ -134,6 +134,18 @@ const loadTools = async () => {
     const response = await fetch(`${API_URL}/api/mcp/settings/${props.serverId}/tools`, {
       headers
     });
+
+    if (response.status === 401) {
+      const data = await response.json();
+      if (data.code === 'auth_required') {
+        toast.error(`Session expired: ${data.detail}`);
+        emit('reauth-needed', props.serverId);
+        // We stop loading but leave the modal open (or let parent close it)
+        loading.value = false;
+        error.value = "Authentication required. Please check the login prompt.";
+        return;
+      }
+    }
 
     if (!response.ok) {
       throw new Error('Failed to load tools');

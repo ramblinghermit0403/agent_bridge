@@ -113,6 +113,7 @@ export default {
   components: {
     ToolPermissionMessage: defineAsyncComponent(() => import('./ToolPermissionMessage.vue'))
   },
+  emits: ['chat-created'],
   setup() {
     const toast = useToast();
     const md = new MarkdownIt({
@@ -534,6 +535,8 @@ export default {
           if (!this.sessionId && data.session_id) {
             this.isUpdatingSession = true; // Prevent reload
             this.$router.replace({ query: { ...this.$route.query, session: data.session_id } });
+            // Notify parent to refresh chat list
+            this.$emit('chat-created');
           }
           console.log("SSE stream ended.");
           this.isAgentProcessing = false;
@@ -711,11 +714,7 @@ export default {
 .greeting-line-1 {
   font-size: 2.5rem; /* Reduced from 3rem */
   font-weight: 500;
-  background: linear-gradient(90deg, #4285f4, #9b72cb, #d96570);
-  -webkit-background-clip: text;
-  background-clip: text; /* Standard property for compatibility */
-  -webkit-text-fill-color: transparent;
-  color: transparent; /* Fallback */
+  color: var(--text-primary);
   margin: 0;
   display: flex;
   align-items: center;
@@ -725,7 +724,7 @@ export default {
 
 .greeting-icon {
   font-size: 1.75rem; /* Reduced from 2rem */
-  -webkit-text-fill-color: initial; /* Reset generic color for emoji */
+  color: var(--text-primary);
 }
 
 .greeting-line-2 {

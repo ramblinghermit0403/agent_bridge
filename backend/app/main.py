@@ -113,3 +113,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+from fastapi.responses import JSONResponse
+from .services.mcp.exceptions import RequiresAuthenticationError
+
+@app.exception_handler(RequiresAuthenticationError)
+async def requires_auth_exception_handler(request: Request, exc: RequiresAuthenticationError):
+    return JSONResponse(
+        status_code=401,
+        content={
+            "detail": exc.message,
+            "code": "auth_required",
+            "server_name": exc.server_name
+        },
+    )

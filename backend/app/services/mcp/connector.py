@@ -103,8 +103,58 @@ class MCPConnector:
         )
         
         if not new_credentials:
-            logger.error(f"Failed to refresh token for {self.server_name}")
-            return False
+            logger.warning(f"Failed to refresh token for {self.server_name}. Checking database for updated credentials...")
+            
+            # Fallback: Check if credentials have been updated in the DB (e.g. user re-authenticated)
+            if self.setting_id:
+                try:
+                    async with AsyncSessionLocal() as session:
+                        from ...models.settings import McpServerSetting
+                        stmt = select(McpServerSetting).where(McpServerSetting.id == self.setting_id)
+                        result = await session.execute(stmt)
+                        setting = result.scalars().first()
+                        
+                        if setting and setting.credentials:
+                            db_creds = json.loads(setting.credentials) if isinstance(setting.credentials, str) else setting.credentials
+                            
+                            # Check if these DB credentials are strictly "newer" or "valid" compared to what we had
+                            # For simplicity, if we have DB creds and our current refresh failed, we try the DB creds.
+                            if db_creds:
+                                logger.info(f"Found credentials in DB for {self.server_name}, attempting to use them as fallback.")
+                                self._credentials = db_creds
+                                self._token = db_creds.get("access_token")
+                                
+                                # Re-check validity of these new credentials
+                                # Recurse once with force_refresh=False to check if these new creds are valid
+                                # We pass force_refresh=False to avoiding looping if they are also expired but refreshable
+                                if not is_token_expired(self._credentials):
+                                    new_credentials = self._credentials # Treat as success
+                                    logger.info(f"Fallback to DB credentials successful for {self.server_name}")
+                                    
+                                    # Update headers immediately since we have a valid token now
+                                    if "figma.com" in self.server_url:
+                                        self._headers = {"X-Figma-Token": self._token}
+                                    elif "notion.com" in self.server_url:
+                                        self._headers = {
+                                            "Authorization": f"Bearer {self._token}",
+                                            "Notion-Version": "2022-06-28"
+                                        }
+                                    else:
+                                        self._headers = {"Authorization": f"Bearer {self._token}"}
+                                        
+                                    return True
+                                else:
+                                    logger.warning(f"DB credentials for {self.server_name} are also expired.")
+                                    # If DB creds are also expired, we could try to refresh THEM, 
+                                    # but let's avoid infinite recursion. One level of fallback is usually enough.
+                except Exception as db_e:
+                    logger.error(f"Error fetching fallback credentials from DB: {db_e}")
+
+            # If still no new_credentials after fallback attempt
+            if not new_credentials:
+                from .exceptions import RequiresAuthenticationError
+                logger.error(f"Token refresh and DB fallback failed for {self.server_name}, flagging for re-auth")
+                raise RequiresAuthenticationError(self.server_name)
         
         # Update credentials
         self._credentials = new_credentials
@@ -145,6 +195,12 @@ class MCPConnector:
         return True
 
     async def list_tools(self) -> List[Dict[str, Any]]:
+        # 0. Ensure token is valid BEFORE checking cache
+        # This prevents returning cached tools when the user's session is actually expired
+        if not await self._ensure_valid_token():
+             # Should practically unreachable as _ensure_valid_token raises exceptions on failure
+             raise RuntimeError(f"Token validation failed for {self.server_name}")
+
         # 1. Check module-level cache
         cache_key = f"{self.server_url}:{hash(str(self._token))}"
         if cache_key in _TOOLS_CACHE:
@@ -203,11 +259,64 @@ class MCPConnector:
 
     async def _execute_with_retry(self, operation, *args, **kwargs):
         """
-        Generic retry logic for 401s:
+        Generic retry logic for auth and transient errors:
         1. Ensure token valid (standard check).
         2. Try operation.
         3. If 401/Auth error, Force Refresh -> Retry.
+        4. If transient error (connection/timeout), Clear session -> Retry once.
         """
+        # Helper to detect transient/connection errors
+        def is_transient_exception(exc):
+            """Check if exception is a transient network/connection error."""
+            transient_types = (
+                ConnectionError,
+                ConnectionResetError,
+                ConnectionRefusedError,
+                ConnectionAbortedError,
+                TimeoutError,
+                asyncio.TimeoutError,
+                OSError,  # Covers many network-level errors
+            )
+            # Direct type check
+            if isinstance(exc, transient_types):
+                return True
+            # Check error message for common transient patterns
+            msg = str(exc).lower()
+            transient_patterns = [
+                "connection reset", "connection refused", "connection closed",
+                "timed out", "timeout", "temporarily unavailable",
+                "network unreachable", "broken pipe", "eof",
+            ]
+            if any(p in msg for p in transient_patterns):
+                return True
+            # Check nested exceptions
+            if getattr(exc, '__cause__', None) and is_transient_exception(exc.__cause__):
+                return True
+            if getattr(exc, '__context__', None) and is_transient_exception(exc.__context__):
+                return True
+            if hasattr(exc, 'exceptions'):
+                for sub_exc in exc.exceptions:
+                    if is_transient_exception(sub_exc):
+                        return True
+            return False
+
+        # Recursively check for 401 or auth-related errors in exceptions and nested groups
+        def is_auth_exception(exc):
+            msg = str(exc).lower()
+            if "401" in msg or "unauthorized" in msg or "authentication failed" in msg:
+                return True
+            # Check direct cause or context
+            if getattr(exc, '__cause__', None) and is_auth_exception(exc.__cause__):
+                return True
+            if getattr(exc, '__context__', None) and is_auth_exception(exc.__context__):
+                return True
+            # Check nested exceptions (ExceptionGroup / TaskGroup)
+            if hasattr(exc, 'exceptions'):
+                for sub_exc in exc.exceptions:
+                    if is_auth_exception(sub_exc):
+                        return True
+            return False
+
         # 1. Initial Standard Check
         if not await self._ensure_valid_token():
              raise RuntimeError(f"Token refresh failed for {self.server_name}. Please re-authenticate.")
@@ -215,37 +324,37 @@ class MCPConnector:
         try:
             return await operation(*args, **kwargs)
         except Exception as e:
-            # Recursively check for 401 or auth-related errors in exceptions and nested groups
-            def is_auth_exception(exc):
-                msg = str(exc).lower()
-                if "401" in msg or "unauthorized" in msg or "authentication failed" in msg:
-                    return True
-                # Check direct cause or context
-                if getattr(exc, '__cause__', None) and is_auth_exception(exc.__cause__):
-                    return True
-                if getattr(exc, '__context__', None) and is_auth_exception(exc.__context__):
-                    return True
-                # Check nested exceptions (ExceptionGroup / TaskGroup)
-                if hasattr(exc, 'exceptions'):
-                    for sub_exc in exc.exceptions:
-                        if is_auth_exception(sub_exc):
-                            return True
-                return False
-
+            # Priority 1: Auth errors -> Refresh token and retry
             if is_auth_exception(e):
                 logger.warning(f"Authentication failed for {self.server_name} (Error: {e}). Forcing token refresh and retrying...")
                 
-                # 2. Force Refresh
+                # Force Refresh
                 if await self._ensure_valid_token(force_refresh=True):
-                    # 3. Retry Operation
+                    # Clear stale session before retry
+                    await self.close()
                     try:
                         logger.info(f"Retrying operation for {self.server_name} with new token...")
                         return await operation(*args, **kwargs)
                     except Exception as retry_e:
                         logger.error(f"Retry failed for {self.server_name}: {retry_e}")
+                        if is_auth_exception(retry_e):
+                             from .exceptions import RequiresAuthenticationError
+                             raise RequiresAuthenticationError(self.server_name)
                         raise retry_e
                 else:
                      raise RuntimeError(f"Forced token refresh failed for {self.server_name}. Please re-authenticate.")
+            
+            # Priority 2: Transient errors -> Clear session and retry once
+            elif is_transient_exception(e):
+                logger.warning(f"Transient error for {self.server_name} (Error: {e}). Clearing session and retrying...")
+                await self.close()  # Clear dead session
+                try:
+                    logger.info(f"Retrying operation for {self.server_name} with fresh connection...")
+                    return await operation(*args, **kwargs)
+                except Exception as retry_e:
+                    logger.error(f"Retry after transient error failed for {self.server_name}: {retry_e}")
+                    raise retry_e
+            
             else:
                 raise e
 

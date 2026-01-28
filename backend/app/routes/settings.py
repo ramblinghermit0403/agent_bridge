@@ -1,5 +1,5 @@
 # main.py
-from typing import List
+from typing import List, Optional
 import asyncio
 from fastapi import HTTPException, Depends,status
 from sqlalchemy.exc import IntegrityError
@@ -38,7 +38,7 @@ async def test_mcp_connection(request: McpConnectionTestRequest):
     """
     try:
         # Assuming MCPConnector is a class that handles the connection logic
-        connector = MCPConnector(sse_url=request.server_url)
+        connector = MCPConnector(server_url=request.server_url)
         await connector.list_tools()
         return {"status": "success", "message": "Connection to MCP server successful."}
     except Exception as e:
@@ -66,30 +66,27 @@ async def _refresh_manifest_internal(setting_id: int, db: AsyncSession, current_
             pass
             
     # 2. Connect and Fetch Tools
-    try:
-        connector = MCPConnector(
-            server_url=db_setting.server_url,
-            credentials=credentials,
-            server_name=db_setting.server_name,
-            setting_id=setting_id,
-            oauth_config=oauth_config,
-            db_session=db
-        )
-        tools = await connector.list_tools()
-        
-        # 3. Update Database
-        import datetime
-        db_setting.tools_manifest = json.dumps(tools)
-        db_setting.last_synced_at = datetime.datetime.utcnow()
-        db.add(db_setting)
-        await db.commit()
-        await db.refresh(db_setting)
-        
-        return tools
-    except Exception as e:
-        logger.error(f"Failed to refresh manifest for {db_setting.server_name}: {e}")
-        # Don't crash connection flow, just log
-        return []
+    # 2. Connect and Fetch Tools
+    # Let exceptions bubble up so they can be handled by the caller or global exception handler
+    connector = MCPConnector(
+        server_url=db_setting.server_url,
+        credentials=credentials,
+        server_name=db_setting.server_name,
+        setting_id=setting_id,
+        oauth_config=oauth_config,
+        db_session=db
+    )
+    tools = await connector.list_tools()
+    
+    # 3. Update Database
+    import datetime
+    db_setting.tools_manifest = json.dumps(tools)
+    db_setting.last_synced_at = datetime.datetime.utcnow()
+    db.add(db_setting)
+    await db.commit()
+    await db.refresh(db_setting)
+    
+    return tools
 
 # Route to create a new MCP server setting
 @router.post("/api/mcp/settings/", response_model=McpServerSettingRead)
@@ -102,9 +99,44 @@ async def create_mcp_setting(
     Creates a new MCP server setting for the authenticated user, using the user's ID
     from the authentication token. It immediately attempts to fetch and cache tool definitions.
     """
+    # 0. Validate URL
+    from urllib.parse import urlparse
+    try:
+        result = urlparse(setting.server_url)
+        if not all([result.scheme, result.netloc]):
+             raise ValueError
+    except:
+        raise HTTPException(status_code=400, detail="Invalid server URL provided.")
+
+    # 1. Check Uniqueness
+    stmt = select(McpServerSetting).where(
+        McpServerSetting.user_id == current_user.id,
+        (McpServerSetting.server_name == setting.server_name) | (McpServerSetting.server_url == setting.server_url)
+    )
+    existing = (await db.execute(stmt)).scalars().first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, 
+            detail="A server with this name or URL already exists."
+        )
+
+    # 2. Test Connection (for non-Auth / non-OAuth)
+    # If it's a simple SSE server without auth, verify it works before saving.
+    # We skip this for OAuth servers or if explicit credentials are provided (though new setting usually implies no creds yet)
+    if not setting.requires_oauth:
+         try:
+             # Assuming MCPConnector is imported
+             connector = MCPConnector(server_url=setting.server_url)
+             await connector.list_tools()
+         except Exception as e:
+             raise HTTPException(status_code=400, detail=f"Connection test failed: {str(e)}")
+
     # Create the database model instance by first converting the Pydantic model to a dict,
     # then adding the user ID from the authenticated user.
     db_setting_data = setting.model_dump()
+    # Remove transient field not in DB
+    db_setting_data.pop("requires_oauth", None)
+    
     db_setting_data["user_id"] = current_user.id
     
     db_setting = McpServerSetting(**db_setting_data)
@@ -115,7 +147,8 @@ async def create_mcp_setting(
         await db.refresh(db_setting)
         
         # --- NEW: Immediately cache tools ---
-        asyncio.create_task(_refresh_manifest_internal(db_setting.id, db, current_user))
+        # (This might be redundant if we just tested it, but ensures background cache is populated properly)
+        await _refresh_manifest_internal(db_setting.id, db, current_user)
         # ------------------------------------
         
         return db_setting
@@ -400,6 +433,7 @@ class OAuthInitRequest(BaseModel):
     scope: str = None # Added for custom server support
     authorization_url: str = None # Advanced custom config
     token_url: str = None # Advanced custom config
+    setting_id: Optional[int] = None # To distinguish Update vs Create
 
 class InspectRequest(BaseModel):
     server_url: str
@@ -424,7 +458,8 @@ async def init_oauth_flow(request: OAuthInitRequest):
             client_secret=request.client_secret,
             scope=request.scope,
             authorization_url=request.authorization_url,
-            token_url=request.token_url
+            token_url=request.token_url,
+            setting_id=request.setting_id
         )
         return {"auth_url": auth_url}
     except Exception as e:
@@ -474,17 +509,33 @@ async def finalize_oauth_flow(
         server_name = data['server_name']
         server_url = data['server_url']
         credentials_json = data['credentials']
+        setting_id = data.get('setting_id')
 
-        # Check if setting exists
-        stmt = select(McpServerSetting).where(
-            McpServerSetting.user_id == current_user.id,
-            McpServerSetting.server_name == server_name
-        )
-        result = await db.execute(stmt)
-        existing_setting = result.scalars().first()
-        
-        if existing_setting:
-            existing_setting.server_url = server_url
+        existing_setting = None
+
+        if setting_id:
+            # STRICT UPDATE: We only update the specific setting we initiated auth for
+            stmt = select(McpServerSetting).where(
+                McpServerSetting.id == setting_id, 
+                McpServerSetting.user_id == current_user.id
+            )
+            existing_setting = (await db.execute(stmt)).scalars().first()
+            if not existing_setting:
+                logger.warning(f"Finalize: Setting {setting_id} not found/owned.")
+                raise HTTPException(status_code=404, detail="Connection setting not available for update.")
+        else:
+            # STRICT CREATE: Block if Name OR URL exists
+            stmt = select(McpServerSetting).where(
+                McpServerSetting.user_id == current_user.id,
+                (McpServerSetting.server_name == server_name) | (McpServerSetting.server_url == server_url)
+            )
+            existing = (await db.execute(stmt)).scalars().first()
+            if existing:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT, 
+                    detail="A server with this name or URL already exists."
+                )
+
         # Extract explicitly requested fields from credentials
         import json
         creds_dict = json.loads(credentials_json)
