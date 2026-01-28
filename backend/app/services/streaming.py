@@ -45,21 +45,16 @@ async def stream_agent_events(
                 tool_name = event['name']
                 tool_input = event['data'].get("input", {})
                 
-                # Polling logic for PendingApproval (Legacy / Fallback)
-                # Note: Graph interrupt usually handles this, but we keep this for robust feedback
+                # Check for PendingApproval directly (Handled mainly by Graph interrupts now)
                 approval_id = None
-                for _ in range(5): 
-                   for pid, data in PendingApproval._pending.items():
-                       if data['user_id'] == user_id and data['tool_name'] == tool_name and data['approved'] is None:
-                           # Check timestamp
-                           created_at = data.get('created_at')
-                           if created_at and created_at < stream_start_time:
-                               continue
-                           approval_id = pid
-                           break
-                   if approval_id: 
-                       break
-                   await asyncio.sleep(0.1)
+                for pid, data in PendingApproval._pending.items():
+                    if data['user_id'] == user_id and data['tool_name'] == tool_name and data['approved'] is None:
+                        # Check timestamp
+                        created_at = data.get('created_at')
+                        if created_at and created_at < stream_start_time:
+                            continue
+                        approval_id = pid
+                        break
                 
                 if approval_id:
                     yield {"event": "tool_approval_required", "data": json.dumps({
@@ -165,6 +160,11 @@ async def stream_agent_events(
                  
                  await asyncio.sleep(0.1)
 
+    except asyncio.CancelledError:
+        logger.info(f"Stream cancelled by client for session {hybrid_session_key}.")
+        # No need to yield error, client is gone.
+        return
+        
     except ResourceExhausted:
         logger.warning(f"Gemini quota exceeded for session {hybrid_session_key}.")
         yield {"event": "server_error", "data": json.dumps({'type': 'error', 'message': "My brain is tired (Gemini Quota Exceeded). Please give me a moment to rest and try again."})}

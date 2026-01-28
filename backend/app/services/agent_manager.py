@@ -55,8 +55,26 @@ def _compute_config_hash(
     try:
         # Sort keys to ensure deterministic JSON
         # Combine servers + model config + tool permissions
+        # NEW: Sanitize servers to exclude volatile credentials from hash
+        sanitized_servers = {}
+        for s_name, s_info in user_servers.items():
+            if isinstance(s_info, dict):
+                # We want to detect changes in credentials without storing the raw secret in the cache key.
+                # Solution: Hash the credentials and store only the hash.
+                server_copy = s_info.copy()
+                creds = server_copy.pop("credentials", None)
+                
+                if creds:
+                    # Convert to string deterministically and hash
+                    creds_str = json.dumps(creds, sort_keys=True)
+                    server_copy["credentials_hash"] = hashlib.sha256(creds_str.encode()).hexdigest()
+                
+                sanitized_servers[s_name] = server_copy
+            else:
+                sanitized_servers[s_name] = s_info
+
         config_data = {
-            "servers": user_servers,
+            "servers": sanitized_servers,
             "provider": model_provider,
             "model": model_name,
             "tool_permissions": tool_permissions or {}

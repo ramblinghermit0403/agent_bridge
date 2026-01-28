@@ -11,7 +11,13 @@ import logging
 from sqlalchemy import select
 from ...database.database import AsyncSessionLocal
 
+import logging
+from contextlib import AsyncExitStack
+
 logger = logging.getLogger(__name__)
+
+# Module-level cache for tool lists: (server_url, token_hash) -> (tools_data, timestamp)
+_TOOLS_CACHE: Dict[str, Any] = {}
 
 class MCPConnector:
     def __init__(
@@ -31,6 +37,11 @@ class MCPConnector:
         self._parsed_url = urlparse(server_url)
         self._credentials = self._parse_credentials(credentials)
         self._token = self._extract_token()
+        
+        # Session management
+        self._session: Optional[ClientSession] = None
+        self._exit_stack: Optional[AsyncExitStack] = None
+        self._lock = asyncio.Lock()
         
         # Determine header format based on server
         if "figma.com" in server_url:
@@ -134,19 +145,61 @@ class MCPConnector:
         return True
 
     async def list_tools(self) -> List[Dict[str, Any]]:
-        return await self._execute_with_retry(self._list_tools_internal)
+        # 1. Check module-level cache
+        cache_key = f"{self.server_url}:{hash(str(self._token))}"
+        if cache_key in _TOOLS_CACHE:
+            logger.info(f"Returning cached tools for {self.server_name or self.server_url}")
+            return _TOOLS_CACHE[cache_key]
+
+        # 2. Execute and cache
+        tools = await self._execute_with_retry(self._list_tools_internal)
+        _TOOLS_CACHE[cache_key] = tools
+        return tools
+
+    async def _get_session(self) -> ClientSession:
+        """
+        Returns a persistent session, creating it if necessary.
+        """
+        async with self._lock:
+            if self._session:
+                return self._session
+
+            logger.info(f"Initializing persistent MCP session for {self.server_name or self.server_url}")
+            self._exit_stack = AsyncExitStack()
+            
+            try:
+                # Determine method
+                try:
+                    # SSE
+                    ctx = sse_client(self.server_url, headers=self._headers)
+                    read_stream, write_stream = await self._exit_stack.enter_async_context(ctx)
+                except Exception as e:
+                    logger.warning(f"SSE failed for {self.server_url}, trying Streamable HTTP: {e}")
+                    ctx = streamablehttp_client(self.server_url, headers=self._headers)
+                    read_stream, write_stream, _ = await self._exit_stack.enter_async_context(ctx)
+
+                self._session = await self._exit_stack.enter_async_context(ClientSession(read_stream, write_stream))
+                await self._session.initialize()
+                return self._session
+            except Exception as e:
+                if self._exit_stack:
+                    await self._exit_stack.aclose()
+                self._exit_stack = None
+                self._session = None
+                raise e
+
+    async def close(self):
+        """Clean up the persistent session."""
+        async with self._lock:
+            if self._exit_stack:
+                await self._exit_stack.aclose()
+            self._exit_stack = None
+            self._session = None
 
     async def _list_tools_internal(self):
-         # Try SSE first, then Streamable HTTP
-        try:
-            return await self._list_tools_sse()
-        except Exception as e:
-            logger.warning(f"SSE connection failed for {self.server_url}: {e}. Trying Streamable HTTP...")
-            try:
-                return await self._list_tools_streamable()
-            except Exception as e2:
-                logger.error(f"Streamable HTTP connection also failed: {e2}")
-                raise e2
+        session = await self._get_session()
+        tools_result = await session.list_tools()
+        return await self._process_tools_result(tools_result)
 
     async def _execute_with_retry(self, operation, *args, **kwargs):
         """
@@ -216,43 +269,17 @@ class MCPConnector:
             })
         return tool_list
 
-    async def _list_tools_sse(self):
-        logger.info(f"Connecting via SSE to {self.server_url}")
-        try:
-            # Try with headers first (newer MCP)
-            async with sse_client(self.server_url, headers=self._headers) as (read_stream, write_stream):
-                async with ClientSession(read_stream, write_stream) as session:
-                    await session.initialize()
-                    tools_result = await session.list_tools()
-                    return await self._process_tools_result(tools_result)
-        except TypeError:
-            # Fallback for older MCP versions that don't support headers
-            logger.warning(f"sse_client rejected headers for {self.server_url}, trying without.")
-            async with sse_client(self.server_url) as (read_stream, write_stream):
-                async with ClientSession(read_stream, write_stream) as session:
-                    await session.initialize()
-                    tools_result = await session.list_tools()
-                    return await self._process_tools_result(tools_result)
-
-    async def _list_tools_streamable(self):
-        logger.info(f"Connecting via Streamable HTTP to {self.server_url}")
-        async with streamablehttp_client(self.server_url, headers=self._headers) as (read, write, get_session_id):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                tools_result = await session.list_tools()
-                return await self._process_tools_result(tools_result)
-
     async def run_tool(self, tool_name: str, parameters: dict):
         async def _run_tool_internal(tool_name, parameters):
-             try:
-                return await self._run_tool_sse(tool_name, parameters)
-             except (httpx.ConnectError, Exception) as e:
-                logger.warning(f"SSE run_tool failed for {tool_name}: {e}. Trying Streamable HTTP...")
-                try:
-                    return await self._run_tool_streamable(tool_name, parameters)
-                except (httpx.ConnectError, Exception) as e2:
-                    logger.error(f"Tool execution failed for {tool_name} on {self.server_url}: {e2}")
-                    raise e2
+            session = await self._get_session()
+            try:
+                result = await asyncio.wait_for(session.call_tool(tool_name, parameters), timeout=60.0)
+                return result.output if hasattr(result, "output") else result
+            except Exception as e:
+                # If call failed, maybe session is dead, clear it so next call retries
+                logger.warning(f"Tool call failed for {tool_name}, clearing session: {e}")
+                await self.close()
+                raise e
 
         try:
              return await self._execute_with_retry(_run_tool_internal, tool_name, parameters)
@@ -260,25 +287,3 @@ class MCPConnector:
              # Final fallback to return string error so agent doesn't crash
              return f"Error: Tool execution failed for {self.server_name}. {str(e)}"
 
-    async def _run_tool_sse(self, tool_name: str, parameters: dict):
-         try:
-             async with sse_client(self.server_url, headers=self._headers) as (read_stream, write_stream):
-                async with ClientSession(read_stream, write_stream) as session:
-                    await asyncio.wait_for(session.initialize(), timeout=10.0)
-                    result = await asyncio.wait_for(session.call_tool(tool_name, parameters), timeout=60.0)
-                    return result.output if hasattr(result, "output") else result
-         except TypeError:
-             logger.warning(f"sse_client run_tool rejected headers for {self.server_url}, trying without.")
-             async with sse_client(self.server_url) as (read_stream, write_stream):
-                async with ClientSession(read_stream, write_stream) as session:
-                    await asyncio.wait_for(session.initialize(), timeout=10.0)
-                    result = await asyncio.wait_for(session.call_tool(tool_name, parameters), timeout=60.0)
-                    return result.output if hasattr(result, "output") else result
-
-    async def _run_tool_streamable(self, tool_name: str, parameters: dict):
-        # Pass headers to support authentication
-        async with streamablehttp_client(self.server_url, headers=self._headers) as (read, write, get_session_id):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                result = await session.call_tool(tool_name, parameters)
-                return result.output if hasattr(result, "output") else result

@@ -19,7 +19,7 @@ PROVIDER_MAP: dict[str, Callable] = {
     # "anthropic": get_anthropic_llm, 
 }
 
-
+@lru_cache(maxsize=16) 
 def get_llm(model_provider: str = "gemini", model_name: str = "gemini-2.5-flash", region_name: Optional[str] = None):
     """
     Returns a cached instance of the LLM based on provider.

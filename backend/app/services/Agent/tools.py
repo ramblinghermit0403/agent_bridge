@@ -126,6 +126,29 @@ def _sanitize_schema(schema: Any) -> Any:
     
     return schema
 
+    return built_tools
+
+def _deduplicate_tool_names(tools: List[StructuredTool]) -> List[StructuredTool]:
+    """
+    Ensures that all tools in the list have unique names.
+    If duplicates are found, appends _2, _3, etc.
+    """
+    seen_names = {}
+    
+    for tool in tools:
+        original_name = tool.name
+        if original_name in seen_names:
+            count = seen_names[original_name]
+            seen_names[original_name] += 1
+            new_name = f"{original_name}_{count}"
+            tool.name = new_name
+            tool.description = f"{tool.description} (Variant {count})"
+            # Note: We don't change the function name, just the tool name exposed to LLM
+        else:
+            seen_names[original_name] = 2 # Next one will be _2
+            
+    return tools
+
 async def build_tools_from_servers(user_mcp_servers: Dict[str, Dict[str, Any]], user_id: str = None, blocking: bool = True) -> List[StructuredTool]:
     """
     Builds LangChain tools from a user-specific server dictionary.
@@ -146,7 +169,7 @@ async def build_tools_from_servers(user_mcp_servers: Dict[str, Dict[str, Any]], 
                 oauth_config = server_info.get("oauth_config")
                 setting_id = server_info.get("id")
             
-            # Create connector
+            # Create connector (Lazy init)
             connector = MCPConnector(
                 url, 
                 credentials=creds, 
@@ -154,21 +177,55 @@ async def build_tools_from_servers(user_mcp_servers: Dict[str, Dict[str, Any]], 
                 oauth_config=oauth_config,
                 setting_id=setting_id
             )
-            tools_data = await connector.list_tools()
             
-            # Get disabled tools for this server from DB (if user_id and setting_id available)
+            # --- CACHE LOGIC START ---
+            tools_data = []
+            manifest_json = server_info.get("tools_manifest") if isinstance(server_info, dict) else None
+            
+            if manifest_json:
+                try:
+                    tools_data = json.loads(manifest_json)
+                    # logger.info(f"Loaded {len(tools_data)} tools from cache for {server_name}")
+                except Exception as e:
+                    logger.warning(f"Failed to parse tool cache for {server_name}, falling back to network: {e}")
+                    manifest_json = None # Fallback
+            
+            if not manifest_json:
+                # Fallback to network call
+                # logger.info(f"Fetching tools via network for {server_name}...")
+                try:
+                    tools_data = await connector.list_tools()
+                except Exception as e:
+                    logger.error(f"Skipping tools for server '{server_name}' due to connection error: {e}")
+                    continue
+            # --- CACHE LOGIC END ---
+            
+            # Get all permissions for this server/user in ONE batch query (Avoid N+1 bottleneck)
             disabled_tools = set()
             if user_id and setting_id:
                 from app.database.database import AsyncSessionLocal
-                from app.services.security.permissions import check_tool_permission
+                from app.models import ToolPermission
+                from sqlalchemy.future import select
                 
                 async with AsyncSessionLocal() as db:
+                    # Select all permission records for this user and server
+                    stmt = select(ToolPermission).where(
+                        ToolPermission.user_id == user_id,
+                        ToolPermission.server_setting_id == setting_id
+                    )
+                    result = await db.execute(stmt)
+                    perms = result.scalars().all()
+                    
+                    # Store as a dict for quick lookup
+                    perm_map = {p.tool_name: p.is_enabled for p in perms}
+                    
                     for tool_info in tools_data:
-                        tool_name = tool_info.get("name")
-                        is_enabled = await check_tool_permission(db, user_id, setting_id, tool_name)
+                        t_name = tool_info.get("name")
+                        # Default is enabled if no record exists
+                        is_enabled = perm_map.get(t_name, True)
                         if not is_enabled:
-                            disabled_tools.add(tool_name)
-                            logger.info(f"Tool '{tool_name}' is DISABLED for user {user_id}, skipping.")
+                            disabled_tools.add(t_name)
+                            logger.info(f"Tool '{t_name}' is DISABLED for user {user_id}, skipping.")
 
             for tool_info in tools_data:
                 tool_name = tool_info.get("name")
@@ -240,7 +297,11 @@ async def build_tools_from_servers(user_mcp_servers: Dict[str, Dict[str, Any]], 
                         logger.error(f"Error creating Pydantic model for tool '{tool_name}': {e}", exc_info=True)
                         continue # Skip this tool if its model can't be created
                 
-                unique_tool_name = f"{server_name.replace(' ', '')}_{tool_name}"
+                # Use server name in tool name to avoid collisions across servers
+                # Sanitized to remove spaces/special chars if needed, but keep uniqueness
+                # FIX: Ensure uniqueness below
+                sanitized_server_name = server_name.replace(' ', '')
+                unique_tool_name = f"{sanitized_server_name}_{tool_name}"
                 full_description = f"{description} This tool is from the '{server_name}' server."
 
                 sync_func, async_func = create_tool_func(tool_name, connector, pydantic_model, user_id=user_id, unique_tool_name=unique_tool_name, blocking=blocking)
@@ -255,6 +316,9 @@ async def build_tools_from_servers(user_mcp_servers: Dict[str, Dict[str, Any]], 
         except Exception as e:
             logger.error(f"Skipping tools for server '{server_name}' due to connection error: {e}")
             continue
+            
+    # Final Deduplication Pass
+    built_tools = _deduplicate_tool_names(built_tools)
     return built_tools
 
 def create_tool_search_tool(tool_registry: Any, user_id: str):

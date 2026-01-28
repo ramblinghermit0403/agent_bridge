@@ -1,6 +1,6 @@
 # models.py
 from typing import Optional
-from sqlalchemy import Column, String, Integer, Boolean, UniqueConstraint,ForeignKey
+from sqlalchemy import Column, String, Integer, Boolean, UniqueConstraint,ForeignKey, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from pydantic import BaseModel
@@ -28,7 +28,12 @@ class McpServerSetting(database.Base):
     client_secret = Column(String, nullable=True)
     authorization_url = Column(String, nullable=True)
     token_url = Column(String, nullable=True)
+    token_url = Column(String, nullable=True)
     expires_at = Column(Integer, nullable=True) # Unix timestamp
+    
+    # Caching columns
+    tools_manifest = Column(String, nullable=True) # JSON cache of tools list
+    last_synced_at = Column(DateTime, nullable=True) # Timestamp of last refresh
 
     # Relationships
     tool_permissions = relationship("ToolPermission", back_populates="server_setting", cascade="all, delete-orphan")

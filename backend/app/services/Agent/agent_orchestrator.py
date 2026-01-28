@@ -1,4 +1,5 @@
 import logging
+import asyncio
 import json
 from typing import TypedDict, Annotated, Sequence, List, Dict, Any, Union, Optional
 from langchain_core.messages import BaseMessage, FunctionMessage, ToolMessage
@@ -51,6 +52,7 @@ async def human_review_node(state: AgentState, config: RunnableConfig):
     """
     Node that handles human review result.
     Checks if the tool was approved or denied, and modifies state accordingly.
+    CRITICAL: Defaults to BLOCKING if no explicit approval is found.
     """
     logger.info("--- Human Review Node Reached ---")
     
@@ -67,51 +69,60 @@ async def human_review_node(state: AgentState, config: RunnableConfig):
     messages = state.get("messages", [])
     last_message = messages[-1] if messages else None
     
+    new_messages = []
+    
     if last_message and hasattr(last_message, "tool_calls") and last_message.tool_calls:
-        denied_tools = []
-        approved_tools = []
-        
         for tool_call in last_message.tool_calls:
             tool_name = tool_call["name"]
             tool_id = tool_call.get("id", "")
             
             # Find the pending approval for this tool
+            found_approval = False
+            is_approved = False
+            
             for pid, data in list(PendingApproval._pending.items()):
                 if data['user_id'] == user_id and data['tool_name'] == tool_name:
-                    if data['approved'] is False:
-                        denied_tools.append((tool_name, tool_id, pid))
-                        # Clean up the denied approval
+                    found_approval = True
+                    
+                    if data['approved'] is True:
+                        is_approved = True
+                        logger.info(f"Tool {tool_name} was APPROVED by user")
+                        # Don't remove yet, let tool_node clean up after execution
+                    elif data['approved'] is False:
+                        logger.info(f"Tool {tool_name} was DENIED by user")
+                        new_messages.append(
+                            ToolMessage(
+                                content=f"Error: User explicitly denied execution of tool '{tool_name}'.",
+                                tool_call_id=tool_id,
+                                name=tool_name
+                            )
+                        )
                         PendingApproval.remove(pid)
-                    elif data['approved'] is True:
-                        approved_tools.append((tool_name, tool_id, pid))
-                        # Keep approved ones for tool execution, clean up after
-                    elif data['approved'] is None:
-                         # CRITICAL FIX: If it's still pending (not explicitly approved), BLOCK IT.
-                         # This happens if the user approved Tool A but left Tool B pending in the same turn.
-                         logger.warning(f"Blocking execution of pending tool {tool_name}")
-                         denied_tools.append((tool_name, tool_id, pid))
-                         # We do NOT remove it, so it stays pending? 
-                         # Actually, if we block it now, the agent will see "Error: Pending".
-                         # The user likely moved on. It's safer to just kill the request.
-                         PendingApproval.remove(pid)
+                    else:  # approved is None (still pending, user hasn't acted)
+                        logger.warning(f"Tool {tool_name} is still pending approval - blocking execution")
+                        new_messages.append(
+                            ToolMessage(
+                                content=f"Error: Tool '{tool_name}' is awaiting user approval.",
+                                tool_call_id=tool_id,
+                                name=tool_name
+                            )
+                        )
+                        # Don't remove, keep it pending for resume
                     break
-        
-        # If any tools were denied (or still pending), inject ToolMessage with error
-        if denied_tools:
-            new_messages = []
-            for tool_name, tool_id, pid in denied_tools:
-                logger.info(f"Tool {tool_name} was DENIED/BLOCKED by user")
-                # Create a fake ToolMessage response indicating denial
+            
+            # CRITICAL FIX: If no pending approval found, block by default (fail-safe)
+            if not found_approval:
+                logger.warning(f"No pending approval found for tool {tool_name} - blocking by default")
                 new_messages.append(
                     ToolMessage(
-                        content=f"Error: User did not approve execution of tool '{tool_name}'.",
+                        content=f"Error: Tool '{tool_name}' requires user approval but no approval record was found.",
                         tool_call_id=tool_id,
                         name=tool_name
                     )
                 )
-            
-            # Return these messages to append to state, causing agent to see denial
-            return {"messages": new_messages}
+    
+    if new_messages:
+        return {"messages": new_messages}
     
     return {}
 
@@ -137,39 +148,80 @@ async def route_tools(state: AgentState, config: RunnableConfig) -> str:
     # We need to check permissions against DB
     if user_id:
         async with AsyncSessionLocal() as db:
-            for tool_call in tool_calls:
-                tool_name = tool_call["name"]
+            from app.models import ToolApproval
+            from sqlalchemy.future import select
+            from datetime import datetime
+
+            # Attempt to strip server prefix if present (format: ServerName_ToolName)
+            # This is heuristic but necessary given the deduplication logic.
+            from ...services.agent.tools import _deduplicate_tool_names # Just for reference
+            
+            # Check all tools in one batch query
+            actual_tool_calls = [tc for tc in tool_calls if tc["name"] != "search_tools"]
+            
+            if actual_tool_calls:
+                # Sanitize tool names for DB check
+                # We assume the user approves the "Raw" tool name or we need to store the unique name.
+                # Currently permissions logic seems to use RAW names.
+                # We'll try to check BOTH unique name and raw name (by splitting).
                 
-                # skip meta-tools
-                if tool_name == "search_tools":
-                    continue
-                    
-                # The tool name might be 'server_tool', we need to check effectively.
-                # Our check_tool_approval mainly needs the tool name suffix if generic, 
-                # but let's pass the full name.
-                # Note: tools.py constructs names as "ServerName_ToolName".
-                
-                # We strip the Unique ID prefix if we want to check the raw name? 
-                # Currently check_tool_approval takes 'tool_name'. 
-                # Let's assume the permission system handles the unique name or we parse it.
-                # For now, pass the full unique name.
-                
-                # Check approval status
-                needs_approval, approval_type = await check_tool_approval(db, user_id, tool_name)
-                
-                if needs_approval and approval_type != 'always':
-                    requires_approval = True
-                    
-                    # Create the PendingApproval record
-                    approval_id = PendingApproval.create(
-                        user_id=user_id,
-                        tool_name=tool_name,
-                        server_name="unknown", # Server name resolution would require extra mapping
-                        tool_input=tool_call.get('args', {})
+                names_to_check = []
+                for tc in actual_tool_calls:
+                    t_name = tc["name"]
+                    names_to_check.append(t_name)
+                    if "_" in t_name:
+                         # Try stripping first part (ServerName_ToolName)
+                         parts = t_name.split("_", 1)
+                         if len(parts) == 2:
+                             names_to_check.append(parts[1])
+
+                try:
+                    stmt = select(ToolApproval).where(
+                        ToolApproval.user_id == user_id,
+                        ToolApproval.tool_name.in_(names_to_check)
                     )
-                    logger.info(f"Blocking tool {tool_name} for approval. Created PendingApproval ID: {approval_id}")
+                    result = await db.execute(stmt)
+                    # Map both raw and unique names if found
+                    approvals = result.scalars().all()
+                    approval_map = {}
+                    for a in approvals:
+                        approval_map[a.tool_name] = a
+                        
+                except Exception as e:
+                     logger.error(f"Error checking tool approvals: {e}")
+                     approval_map = {} # Fail allowed (fallback to needs_approval=True)
+
+                for tool_call in actual_tool_calls:
+                    tool_name = tool_call["name"]
                     
-                    # We continue loop to create approval requests for ALL tools in this turn
+                    # Whitelist internal tools
+                    if tool_name.startswith("_"):
+                        continue
+                        
+                    # Check unique name then raw name
+                    approval = approval_map.get(tool_name)
+                    if not approval and "_" in tool_name:
+                         raw_name = tool_call["name"].split("_", 1)[1]
+                         approval = approval_map.get(raw_name)
+
+                    needs_approval = True
+                    
+                    if approval:
+                        # Check expiry
+                        is_expired = approval.expires_at and approval.expires_at < datetime.utcnow()
+                        if not is_expired and approval.approval_type == 'always':
+                            needs_approval = False
+                    
+                    if needs_approval:
+                        requires_approval = True
+                        # We must store the EXACT name the agent used, so the UI can match it later
+                        approval_id = PendingApproval.create(
+                            user_id=user_id,
+                            tool_name=tool_name, 
+                            server_name="unknown",
+                            tool_input=tool_call.get('args', {})
+                        )
+                        logger.info(f"Blocking tool {tool_name} for approval. Created PendingApproval ID: {approval_id}")
                     
     if requires_approval:
         return "human_review"
@@ -267,11 +319,88 @@ def create_graph_agent(llm, tools, prompt, model_provider="gemini"):
         
         return {"messages": [response]}
 
+    # --- Custom Filtered ToolNode for Partial Execution ---
+    class FilteredToolNode:
+        """
+        A ToolNode that skips tool calls which already have a ToolMessage response.
+        This allows partial execution: denied tools have error responses injected,
+        and this node only executes the remaining approved tools.
+        """
+        def __init__(self, tools_list):
+            from langgraph.prebuilt import ToolNode
+            self._inner_tool_node = ToolNode(tools_list)
+            self._tools_by_name = {t.name: t for t in tools_list}
+            
+        async def __call__(self, state: AgentState, config: RunnableConfig = None):
+            messages = state.get("messages", [])
+            if not messages:
+                return {}
+            
+            # Find the last AIMessage with tool calls
+            ai_message = None
+            for msg in reversed(messages):
+                if hasattr(msg, "tool_calls") and msg.tool_calls:
+                    ai_message = msg
+                    break
+            
+            if not ai_message:
+                return {}
+            
+            # Collect tool_call_ids that already have responses
+            existing_responses = set()
+            for msg in messages:
+                if hasattr(msg, "tool_call_id") and msg.tool_call_id:
+                    existing_responses.add(msg.tool_call_id)
+            
+            # Execute only tools without responses
+            new_messages = []
+            for tool_call in ai_message.tool_calls:
+                tool_id = tool_call.get("id", "")
+                tool_name = tool_call["name"]
+                
+                if tool_id in existing_responses:
+                    logger.info(f"FilteredToolNode: Skipping {tool_name} (already has response)")
+                    continue
+                
+                # Execute the tool
+                tool = self._tools_by_name.get(tool_name)
+                if tool:
+                    try:
+                        logger.info(f"FilteredToolNode: Executing {tool_name}")
+                        result = await tool.ainvoke(tool_call.get("args", {}))
+                        new_messages.append(
+                            ToolMessage(
+                                content=str(result),
+                                tool_call_id=tool_id,
+                                name=tool_name
+                            )
+                        )
+                    except Exception as e:
+                        logger.error(f"FilteredToolNode: Error executing {tool_name}: {e}")
+                        new_messages.append(
+                            ToolMessage(
+                                content=f"Error executing tool: {str(e)}",
+                                tool_call_id=tool_id,
+                                name=tool_name
+                            )
+                        )
+                else:
+                    logger.warning(f"FilteredToolNode: Tool {tool_name} not found")
+                    new_messages.append(
+                        ToolMessage(
+                            content=f"Error: Tool '{tool_name}' not found",
+                            tool_call_id=tool_id,
+                            name=tool_name
+                        )
+                    )
+            
+            return {"messages": new_messages} if new_messages else {}
+
     # 1. Add Nodes
     workflow.add_node("agent", agent_node)
     
-    # Standard ToolNode
-    workflow.add_node("tools", ToolNode(tools))
+    # Use FilteredToolNode instead of standard ToolNode
+    workflow.add_node("tools", FilteredToolNode(tools))
     
     workflow.add_node("human_review", human_review_node)
 
@@ -292,29 +421,19 @@ def create_graph_agent(llm, tools, prompt, model_provider="gemini"):
     # From tools, go back to agent
     workflow.add_edge("tools", "agent")
     
-    # From human_review, conditionally route based on approval status
-    # If denied tools, they added ToolMessage, so go back to agent to process
-    # If approved, proceed to tools
+    # From human_review, always proceed to tools.
+    # FilteredToolNode will skip denied tools (which already have ToolMessage responses)
+    # and only execute approved ones. If ALL are denied, it returns empty and agent continues.
     def route_after_human_review(state: AgentState) -> str:
-        messages = state.get("messages", [])
-        if not messages:
-            return "tools"
-        
-        # Check if the last message is a ToolMessage (denial case)
-        last_msg = messages[-1]
-        if hasattr(last_msg, "type") and last_msg.type == "tool":
-            # Tool denial message was added, go to agent to process
-            return "agent"
-        
-        # Otherwise, proceed to tools (approved case)
+        # Always route to tools - FilteredToolNode handles partial execution
+        logger.info("route_after_human_review: Proceeding to filtered tool execution")
         return "tools"
     
     workflow.add_conditional_edges(
         "human_review",
         route_after_human_review,
         {
-            "tools": "tools",
-            "agent": "agent"
+            "tools": "tools"
         }
     )
 

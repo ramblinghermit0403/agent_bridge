@@ -47,7 +47,8 @@ async def get_user_servers(db: AsyncSession, user_id: str) -> Dict[str, Dict[str
             "id": setting.id,
             "url": setting.server_url,
             "credentials": setting.credentials,
-            "oauth_config": oauth_config
+            "oauth_config": oauth_config,
+            "tools_manifest": setting.tools_manifest  # NEW: Include cached tool definitions
         }
     
     if server_dict:

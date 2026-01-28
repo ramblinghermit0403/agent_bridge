@@ -47,6 +47,50 @@ async def test_mcp_connection(request: McpConnectionTestRequest):
             detail=f"Failed to connect to MCP server: {str(e)}"
         )
 
+# Helper function to refresh manifest
+async def _refresh_manifest_internal(setting_id: int, db: AsyncSession, current_user: User):
+    db_setting = await db.get(McpServerSetting, setting_id)
+    if not db_setting:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Setting not found")
+    
+    # 1. Prepare credentials
+    import json
+    credentials = None
+    oauth_config = None
+    if db_setting.credentials:
+        try:
+            creds_data = json.loads(db_setting.credentials)
+            credentials = creds_data
+            oauth_config = creds_data.get("oauth_config")
+        except:
+            pass
+            
+    # 2. Connect and Fetch Tools
+    try:
+        connector = MCPConnector(
+            server_url=db_setting.server_url,
+            credentials=credentials,
+            server_name=db_setting.server_name,
+            setting_id=setting_id,
+            oauth_config=oauth_config,
+            db_session=db
+        )
+        tools = await connector.list_tools()
+        
+        # 3. Update Database
+        import datetime
+        db_setting.tools_manifest = json.dumps(tools)
+        db_setting.last_synced_at = datetime.datetime.utcnow()
+        db.add(db_setting)
+        await db.commit()
+        await db.refresh(db_setting)
+        
+        return tools
+    except Exception as e:
+        logger.error(f"Failed to refresh manifest for {db_setting.server_name}: {e}")
+        # Don't crash connection flow, just log
+        return []
+
 # Route to create a new MCP server setting
 @router.post("/api/mcp/settings/", response_model=McpServerSettingRead)
 async def create_mcp_setting(
@@ -56,7 +100,7 @@ async def create_mcp_setting(
 ):
     """
     Creates a new MCP server setting for the authenticated user, using the user's ID
-    from the authentication token.
+    from the authentication token. It immediately attempts to fetch and cache tool definitions.
     """
     # Create the database model instance by first converting the Pydantic model to a dict,
     # then adding the user ID from the authenticated user.
@@ -69,6 +113,11 @@ async def create_mcp_setting(
         db.add(db_setting)
         await db.commit()
         await db.refresh(db_setting)
+        
+        # --- NEW: Immediately cache tools ---
+        asyncio.create_task(_refresh_manifest_internal(db_setting.id, db, current_user))
+        # ------------------------------------
+        
         return db_setting
     except IntegrityError:
         await db.rollback()
@@ -204,6 +253,24 @@ async def get_server_presets():
         logger.error(f"Failed to load presets: {e}")
         return {}
 
+# Define router.post for refresh BEFORE usage to allow referencing
+@router.post("/api/mcp/settings/{setting_id}/refresh")
+async def refresh_mcp_setting(
+    setting_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(database.get_db)
+):
+    """
+    Force-refresh the tools manifest from the remote server.
+    """
+    db_setting = await db.get(McpServerSetting, setting_id)
+    if not db_setting:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Setting not found")
+    if db_setting.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+        
+    await _refresh_manifest_internal(setting_id, db, current_user)
+    return {"status": "success", "message": "Tools refreshed successfully"}
 
 # Route to list tools for a specific MCP server setting (DEPRECATED: see tool_permissions.py)
 @router.get("/api/mcp/settings/{setting_id}/tools-deprecated")
@@ -273,42 +340,11 @@ async def reconnect_mcp_setting(
     
     if db_setting.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
-
-    try:
-        credentials = None
-        oauth_config = None
-        
-        if db_setting.credentials:
-            import json
-            try:
-                creds_data = json.loads(db_setting.credentials)
-                credentials = creds_data 
-                oauth_config = creds_data.get("oauth_config")
-            except json.JSONDecodeError:
-                logger.error("Failed to decode credentials JSON for reconnect")
-                pass
-
-        connector = MCPConnector(
-            server_url=db_setting.server_url, 
-            credentials=credentials,
-            server_name=db_setting.server_name,
-            setting_id=setting_id,
-            oauth_config=oauth_config,
-            db_session=db 
-        )
-        
-        # This will trigger connection check + token refresh if needed
-        await connector.list_tools()
-        
-        return {"status": "success", "message": f"Successfully reconnected to {db_setting.server_name}"}
-
-    except Exception as e:
-        logger.error(f"Failed to reconnect: {e}")
-        # Return 500 but with clear message
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Connection failed: {str(e)}"
-        )
+    
+    # Trigger refresh
+    await _refresh_manifest_internal(setting_id, db, current_user)
+    
+    return {"status": "success", "message": f"Successfully reconnected to {db_setting.server_name}"}
 
 from fastapi import Depends, HTTPException
 from pydantic import BaseModel, EmailStr
