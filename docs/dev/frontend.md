@@ -55,3 +55,41 @@ Styles are defined in `src/assets/`. To customize the theme, edit the CSS files 
 ### Adding a New API Call
 1.  Define the function in the appropriate service file or component.
 2.  Call it from your component or store action.
+
+---
+
+## Core Components
+
+The application is built from several key reusable components located in `client/src/components`.
+
+### 1. AIagent (`agent/AIagent.vue`)
+The primary chat interface. It handles the entire lifecycle of a conversation session.
+
+*   **Key Responsibilities**:
+    *   **SSE streaming**: Connects to `/ask/stream` to receive real-time tokens and tool events.
+    *   **Message Rendering**: Displays user inputs, agent responses (Markdown), and scratchpad thoughts.
+    *   **State Management**: Tracks `isAgentProcessing`, `isTyping`, and current `sessionId`.
+    *   **Model Selection**: Fetches and allows switching between available LLM providers.
+
+### 2. ToolPermissionMessage (`agent/ToolPermissionMessage.vue`)
+A specialized interactive bubble that appears when the Agent requests permission to execute a sensitive tool.
+
+*   **Props**:
+    *   `toolName` (String): Name of the tool (e.g., `github_create_issue`).
+    *   `serverName` (String): Origin server.
+    *   `payload` (Object): The arguments the agent wants to pass to the tool.
+    *   `approvalId` (String): Unique ID for the approval request.
+*   **Events**:
+    *   `@approve`: Emitted when user clicks "Allow Once" or "Always Allow".
+    *   `@deny`: Emitted when user clicks "Deny".
+
+### 3. ServerConfigModal (`settings/ServerConfigModal.vue`)
+A configuration dialog for managing specific MCP servers.
+
+*   **Props**:
+    *   `isOpen` (Boolean): Controls visibility.
+    *   `serverId` (Number): ID of the server setting to configure.
+*   **Features**:
+    *   **Tool Toggles**: Enable/Disable specific tools for a server.
+    *   **Approval Management**: View and revoke "Always Allow" permissions.
+    *   **Status Indicators**: Shows connection status and tool count.

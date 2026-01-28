@@ -84,8 +84,8 @@
           <textarea v-model="inputMessage" @keydown.ctrl.enter.prevent="sendMessage" placeholder="Ask AgentBridge..." class="input-textarea" rows="2" :disabled="isAgentProcessing"></textarea>
           <div class="input-actions">
             <div class="left-actions">
-                <button @click="triggerFileInput" class="attach-button" :disabled="isAgentProcessing"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" /></svg></button>
-                <input ref="fileInput" type="file" @change="handleFile" style="display: none" />
+                <!-- <button @click="triggerFileInput" class="attach-button" :disabled="isAgentProcessing"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" /></svg></button>
+                <input ref="fileInput" type="file" @change="handleFile" style="display: none" /> -->
                 
                 <select v-model="selectedModel" class="model-select" :disabled="isAgentProcessing">
                     <option v-for="model in availableModels" :key="model.id" :value="model">{{ model.name }}</option>

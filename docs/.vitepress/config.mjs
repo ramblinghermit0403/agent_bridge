@@ -9,6 +9,10 @@ export default withMermaid({
     head: [
         ['link', { rel: 'icon', href: '/favicon.ico' }]
     ],
+    mermaid: {
+        // refer to mermaidjs docs for options
+        theme: 'default',
+    },
     themeConfig: {
         logo: '/favicon.ico',
         nav: [
@@ -35,7 +39,15 @@ export default withMermaid({
                     { text: 'Agent Core', link: '/dev/agent-core' },
                     { text: 'Extending Platform', link: '/dev/expansion' },
                     { text: 'Frontend', link: '/dev/frontend' },
-                    { text: 'API Reference', link: '/dev/api' }
+                    {
+                        text: 'API Reference',
+                        items: [
+                            { text: 'Overview', link: '/api/index' },
+                            { text: 'Agent Services', link: '/api/agent-services' },
+                            { text: 'MCP Services', link: '/api/mcp-services' },
+                            { text: 'Database Models', link: '/api/models' }
+                        ]
+                    }
                 ]
             }
         ],

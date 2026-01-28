@@ -22,8 +22,21 @@ PROVIDER_MAP: dict[str, Callable] = {
 @lru_cache(maxsize=16) 
 def get_llm(model_provider: str = "gemini", model_name: str = "gemini-2.5-flash", region_name: Optional[str] = None):
     """
-    Returns a cached instance of the LLM based on provider.
-    Dispatches to specific provider modules via PROVIDER_MAP.
+    Factory function to retrieve a cached LLM instance.
+
+    Uses `lru_cache` to avoid re-initializing the LLM client (which can be expensive) 
+    for the same provider/model combination.
+
+    Args:
+        model_provider (str): The provider name (e.g., 'gemini', 'openai').
+        model_name (str): The model identifier.
+        region_name (str, optional): AWS region for Bedrock or similar regional providers.
+
+    Returns:
+        BaseChatModel: An instance of a LangChain Chat Model.
+
+    Raises:
+        ValueError: If the `model_provider` is not supported in `PROVIDER_MAP`.
     """
     
     # Normalize inputs

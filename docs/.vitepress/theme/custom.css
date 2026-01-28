@@ -56,3 +56,8 @@
 .VPLink {
     color: inherit;
 }
+
+/* Invert logo in dark mode */
+.dark .VPNavBarTitle .logo {
+    filter: invert(1);
+}

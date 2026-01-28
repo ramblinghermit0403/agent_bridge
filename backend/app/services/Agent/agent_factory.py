@@ -29,10 +29,21 @@ async def create_final_agent_pipeline(
 ) -> Any:
     """
     Creates a user-specific AgentExecutor pipeline on-demand.
-    Refactored to use modular components:
-    - llm_factory: handles provider abstraction
-    - tools: handles MCP connection and dynamic creation
-    - prompts: handles prompt templates
+
+    This factory function assembles the agent by:
+    1. initializing the LLM provider.
+    2. connecting to MCP servers to build the toolset.
+    3. initializing the ToolRegistry for dynamic tool discovery.
+    4. compiling the LangGraph workflow with a memory checkpointer.
+
+    Args:
+        user_mcp_servers (Dict[str, Any]): Configuration for the user's MCP servers.
+        user_id (str, optional): The ID of the authenticated user.
+        model_provider (str): The name of the LLM provider (default: "gemini").
+        model_name (str): The specific model version to use.
+
+    Returns:
+        GraphAgentExecutor: An initialized executor ready to handle user queries.
     """
     
     # 1. Get LLM (Cached via Factory)

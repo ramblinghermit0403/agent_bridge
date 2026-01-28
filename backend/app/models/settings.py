@@ -13,6 +13,29 @@ from ..models import User
 
 
 class McpServerSetting(database.Base):
+    """
+    Configuration for a connected MCP (Model Context Protocol) server.
+
+    Stores connection details, authentication credentials, and caching metadata 
+    for a specific user's connection to an MCP server.
+
+    Attributes:
+        id (int): Primary Key.
+        user_id (str): Foreign Key to the User.
+        server_name (str): Unique name for this server (per user).
+        server_url (str): The endpoint URL of the MCP service.
+        is_active (bool): Whether this server should be used by the agent.
+        credentials (str): JSON blob storing current tokens (access/refresh).
+        
+        # OAuth Fields
+        client_id (str): OAuth client ID.
+        client_secret (str): OAuth client secret (stored encrypted/securely ideally).
+        token_url (str): Endpoint to refresh tokens.
+        
+        # Caching
+        tools_manifest (str): Cached JSON of available tools to avoid network calls on every turn.
+        last_synced_at (DateTime): When the tool cache was last updated.
+    """
     __tablename__ = "mcp_server_settings"
 
     id = Column(Integer, primary_key=True, index=True) # Added index for ID as well

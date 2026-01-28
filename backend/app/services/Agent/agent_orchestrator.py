@@ -18,6 +18,13 @@ logger = logging.getLogger(__name__)
 
 # --- State Definition ---
 class AgentState(TypedDict):
+    """
+    Represents the state of the agent in the LangGraph workflow.
+
+    Attributes:
+        messages (Annotated[Sequence[BaseMessage], add_messages]): The conversation history, including user inputs, 
+            AI responses, and tool outputs. Used by LangGraph to track the conversation.
+    """
     messages: Annotated[Sequence[BaseMessage], add_messages]
     # We can add more state here like 'pending_approval' if needed
 
@@ -25,9 +32,23 @@ class AgentState(TypedDict):
 
 async def sub_agent_node(state: AgentState, llm=None, tools=None, prompt=None, *, config: RunnableConfig = None):
     """
-    The main agent node that calls the LLM.
-    Dependencies (llm, tools, prompt) are injected via partial binding.
-    config is passed by LangGraph as a keyword argument.
+    The main agent node that invokes the LLM with bound tools.
+
+    This node binds the provided tools to the LLM and executes the chain (Prompt -> LLM).
+    It processes the current state messages and returns the AI's response (which may include tool calls).
+
+    Args:
+        state (AgentState): The current state of the agent execution.
+        llm: The Language Model instance to use.
+        tools: A list of available tools for the agent.
+        prompt: The system prompt template.
+        config (RunnableConfig, optional): Configuration passed by LangGraph.
+
+    Returns:
+        dict: A dictionary containing the new messages to append to the state ({"messages": [response]}).
+
+    Raises:
+        ValueError: If LLM, tools, or prompt are not provided.
     """
     logger.info(f"sub_agent_node: Entering with {len(state['messages'])} messages")
     
@@ -50,9 +71,21 @@ async def sub_agent_node(state: AgentState, llm=None, tools=None, prompt=None, *
 
 async def human_review_node(state: AgentState, config: RunnableConfig):
     """
-    Node that handles human review result.
-    Checks if the tool was approved or denied, and modifies state accordingly.
-    CRITICAL: Defaults to BLOCKING if no explicit approval is found.
+    Node that handles the human review process for sensitive tool executions.
+
+    This node checks if a tool call requires approval and what the user's decision was 
+    (Approved, Denied, or Pending). It modifies the state to inject error messages for denals
+    or blocks execution if approval is missing.
+
+    CRITICAL SAFETY: Defaults to BLOCKING execution if no explicit 'Approved' application is found
+    in the `PendingApproval` store.
+
+    Args:
+        state (AgentState): The current state.
+        config (RunnableConfig): Configuration containing the `user_id`.
+
+    Returns:
+        dict: Updates to the state messages, such as error messages for denied tools.
     """
     logger.info("--- Human Review Node Reached ---")
     
@@ -130,7 +163,19 @@ async def human_review_node(state: AgentState, config: RunnableConfig):
 
 async def route_tools(state: AgentState, config: RunnableConfig) -> str:
     """
-    Decides whether to go to tools, human_review, or end.
+    Routing logic to determine the next step after an Agent's turn.
+
+    Decides whether to:
+    1. End the conversation (if no tool calls).
+    2. Proceed to `tools` execution (if tool calls exist and are pre-approved).
+    3. Proceed to `human_review` (if tool calls require user permission).
+
+    Args:
+        state (AgentState): The current state.
+        config (RunnableConfig): Configuration containing the `user_id`.
+
+    Returns:
+        str: The name of the next node ("tools", "human_review", or END).
     """
     messages = state["messages"]
     last_message = messages[-1]
@@ -244,13 +289,22 @@ from functools import partial
 
 def create_graph_agent(llm, tools, prompt, model_provider="gemini"):
     """
-    Builds the compiled StateGraph.
-    
+    Builds and compiles the LangGraph StateGraph for the agent.
+
+    Constructs the workflow graph including:
+    - Agent Node (LLM invocation)
+    - Tools Node (Execution of approved tools)
+    - Human Review Node (Permission handling)
+    - Conditional Routing (Agent -> Tools/Review/End)
+
     Args:
-        llm: Language model instance
-        tools: List of LangChain tools
-        prompt: Chat prompt template
-        model_provider: Provider name (e.g., 'gemini', 'bedrock') to determine tool node type
+        llm: The Language Model instance.
+        tools: List of available LangChain tools.
+        prompt: The system chat prompt template.
+        model_provider (str): The provider name (e.g., "gemini") to adapt node logic if needed.
+
+    Returns:
+        StateGraph: The uncompiled LangGraph workflow definition.
     """
     workflow = StateGraph(AgentState)
 
@@ -446,8 +500,17 @@ def create_graph_agent(llm, tools, prompt, model_provider="gemini"):
 
 class GraphAgentExecutor:
     """
-    Wraps the compiled graph to mimic the AgentExecutor interface
-    used by the rest of the application.
+    Wrapper for LangGraph to maintain compatibility with legacy AgentExecutor interface.
+
+    This class adapts the LangGraph workflow to the `invoke` and `astream_events` methods
+    expected by the rest of the application, bridging the gap between the new graph-based
+    agent and the existing API endpoints.
+
+    Attributes:
+        graph: The compiled LangGraph application.
+        checkpointer: Persistence mechanism for graph state.
+        thread_id (str): Default thread ID for session management.
+        tool_registry: Registry of available tools for dynamic loading.
     """
     def __init__(self, graph, checkpointer=None, thread_id="default", tool_registry=None):
         self.graph = graph

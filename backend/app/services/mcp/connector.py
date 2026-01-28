@@ -20,6 +20,21 @@ logger = logging.getLogger(__name__)
 _TOOLS_CACHE: Dict[str, Any] = {}
 
 class MCPConnector:
+    """
+    Manages persistent connections and tool execution for Model Context Protocol (MCP) servers.
+
+    This class handles:
+    - Establishing and maintaining sessions (SSE or HTTP).
+    - Authentication and Token Management (OAuth, Refresh).
+    - Tool discovery and caching.
+    - Reliable tool execution with retries and error handling.
+
+    Attributes:
+        server_url (str): The endpoint URL of the MCP server.
+        server_name (str): Human-readable name of the server.
+        oauth_config (dict): Oauth2 configuration for token refreshes.
+        setting_id (int): Database ID of the server setting for persisting credentials.
+    """
     def __init__(
         self, 
         server_url: str, 
@@ -29,6 +44,17 @@ class MCPConnector:
         db_session: Optional[Any] = None,
         setting_id: Optional[int] = None
     ):
+        """
+        Initialize the MCP Connector.
+
+        Args:
+            server_url (str): The MCP server URL.
+            credentials (str, optional): JSON string or dict of credentials (access_token, refresh_token).
+            server_name (str, optional): Name of the server (used for logging and refreshes).
+            oauth_config (dict, optional): Config for OAuth flow (client_id, etc.).
+            db_session (Any, optional): Storage session (not primarily used here, usually passed to managers).
+            setting_id (int, optional): ID to update credentials in the DB.
+        """
         self.server_url = server_url
         self.server_name = server_name
         self.oauth_config = oauth_config
@@ -259,11 +285,26 @@ class MCPConnector:
 
     async def _execute_with_retry(self, operation, *args, **kwargs):
         """
-        Generic retry logic for auth and transient errors:
-        1. Ensure token valid (standard check).
-        2. Try operation.
-        3. If 401/Auth error, Force Refresh -> Retry.
-        4. If transient error (connection/timeout), Clear session -> Retry once.
+        Generic retry logic for authentication and transient network errors.
+
+        Strategy:
+        1. Validate token.
+        2. Attempt operation.
+        3. On Auth Error (401): Force refresh token and retry.
+        4. On Transient Error (Timeout/Connection): Clear session and retry once.
+
+        Args:
+            operation (Callable): Async function to execute.
+            *args: Positional args for operation.
+            **kwargs: Keyword args for operation.
+
+        Returns:
+            Any: The result of the operation.
+
+        Raises:
+            RequiresAuthenticationError: If re-auth is needed even after refresh.
+            RuntimeError: If token validation fails hard.
+            Exception: Original exception if not handled by retry logic.
         """
         # Helper to detect transient/connection errors
         def is_transient_exception(exc):
@@ -379,6 +420,19 @@ class MCPConnector:
         return tool_list
 
     async def run_tool(self, tool_name: str, parameters: dict):
+        """
+        Executes a specific tool on the MCP server.
+
+        Wraps the execution in `_execute_with_retry` to handle potential
+        session timeouts or expired tokens automatically.
+
+        Args:
+            tool_name (str): The name of the tool to run.
+            parameters (dict): The arguments to pass to the tool.
+
+        Returns:
+            str or Any: The tool output or error message.
+        """
         async def _run_tool_internal(tool_name, parameters):
             session = await self._get_session()
             try:

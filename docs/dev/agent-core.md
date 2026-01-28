@@ -46,6 +46,28 @@ def build_langgraph_prompt():
     # ...
 ```
 
+## Agent Workflow
+The agent follows a **cyclic graph architecture** defined in `agent_orchestrator.py`.
+
+```mermaid
+graph TD
+    Start([Start]) --> Agent[Agent Node]
+
+    subgraph "Core Logic"
+        Agent -- "LLM Response" --> Router{Route Tools}
+    end
+
+    subgraph "Execution Path"
+        Router -- "No Tools" --> End([End])
+        Router -- "Auto Approved" --> Tools[Tool Execution]
+        Router -- "Requires Approval" --> HumanReview[Human Review]
+        
+        HumanReview -- "Decision Made" --> Tools
+    end
+
+    Tools -- "Tool Output" --> Agent
+```
+
 ## 2. Memory & Persistence
 
 The agent's memory is decoupled from the logic, allowing you to swap backends depending on your deployment needs (Local Dev vs. Production).

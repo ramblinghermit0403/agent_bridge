@@ -14,7 +14,7 @@ graph TD
     end
     
     subgraph "Capabilities"
-        LangGraph -- "Call" --> LLM[LLM Provider (Gemini/OpenAI)]
+        LangGraph -- "Call" --> LLM["LLM Provider (Gemini/OpenAI)"]
         LangGraph -- "Execute" --> MCP[MCP Client]
     end
     

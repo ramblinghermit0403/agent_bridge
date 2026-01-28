@@ -8,6 +8,17 @@ from sqlalchemy.orm import relationship
 # user model
 
 class User(database.Base):
+    """
+    Represents a registered user or guest in the system.
+
+    Attributes:
+        id (str): Unique identifier for the user (PK).
+        username (str, optional): Display name for registered users.
+        email (str, optional): Contact email for registered users.
+        is_guest (bool): Flag indicating if the user is a temporary guest account.
+        tool_permissions (list[ToolPermission]): Linked tool permissions.
+        tool_approvals (list[ToolApproval]): Linked tool execution approvals.
+    """
     __tablename__="Users"
     id=Column(String, primary_key=True)
     username=Column(String, nullable=True) # Username optional for guest

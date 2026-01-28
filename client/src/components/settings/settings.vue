@@ -1011,10 +1011,9 @@ onMounted(() => {
 
 .form-button {
   background-color: var(--accent-color);
-  color: white;
+  color: var(--bg-primary);
   border-color: var(--accent-color);
 }
-
 .form-button:hover {
   background-color: var(--accent-hover);
 }
@@ -1101,7 +1100,6 @@ onMounted(() => {
   border-radius: 24px;
   transition: background-color 0.2s;
 }
-
 .slider:before {
   position: absolute;
   content: "";
@@ -1109,7 +1107,7 @@ onMounted(() => {
   width: 20px;
   left: 2px;
   bottom: 2px;
-  background-color: white;
+  background-color: var(--bg-primary);
   border-radius: 50%;
   transition: transform 0.2s;
 }
