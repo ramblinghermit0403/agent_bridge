@@ -2,6 +2,8 @@
 
 **Agent Bridge** is a powerful AI agent platform that connects LangChain agents with MCP (Model Context Protocol) servers, enabling intelligent automation and tool execution through a modern web interface.
 
+[<video src="client/src/assets/tutorial.mp4" controls width="100%"></video>](https://github.com/user-attachments/assets/dced0bda-c6f0-4a26-803f-a7f8b818c59f)
+
 ## 🌟 Features
 
 - **AI Agent Integration**: Built on FastAPI with LangChain for intelligent agent orchestration
@@ -27,7 +29,7 @@ For detailed configuration guides, please see:
 ## 🎥 Walkthrough
 
 
-<video src="client/src/assets/tutorial.mp4" controls width="100%"></video>
+
 
 
 ## 📁 Project Structure
