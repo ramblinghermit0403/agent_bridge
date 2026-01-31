@@ -8,7 +8,9 @@ Location: `backend/app/services/mcp/`
 
 ## MCP Connector
 
-**File**: [`connector.py`](../backend/app/services/mcp/connector.py)
+**File**: [`connector.py`](https://github.com/ramblinghermit0403/agent_bridge/blob/main/backend/app/services/mcp/connector.py)
+
+
 
 The `MCPConnector` class is the heavy lifter. It manages the persistent connection lifecycle, handling the complexities of SSE (Server-Sent Events) or HTTP streams, and ensuring authentication remains valid.
 
@@ -51,7 +53,9 @@ Fetches the `tools/list` from the server.
 
 ## Token Manager
 
-**File**: [`token_manager.py`](../backend/app/services/mcp/token_manager.py)
+**File**: [`token_manager.py`](https://github.com/ramblinghermit0403/agent_bridge/blob/main/backend/app/services/mcp/token_manager.py)
+
+
 
 A specialized utility for handling OAuth2 token lifecycles. It ensures the agent never fails mid-task due to an expired access token.
 
@@ -86,7 +90,9 @@ def is_token_expired(
 
 ## Authentication
 
-**File**: [`auth.py`](../backend/app/services/mcp/auth.py)
+**File**: [`auth.py`](https://github.com/ramblinghermit0403/agent_bridge/blob/main/backend/app/services/mcp/auth.py)
+
+
 
 Handles the "Calibration Phase" - the initial handshake when a user adds a new MCP server.
 - **`exchange_code_for_token`**: Swaps the temporary OAuth authorization code for the initial Access/Refresh token pair.

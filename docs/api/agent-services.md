@@ -8,7 +8,9 @@ Location: `backend/app/services/agent/`
 
 ## Agent Orchestrator
 
-**File**: [`agent_orchestrator.py`](../backend/app/services/agent/agent_orchestrator.py)
+**File**: [`agent_orchestrator.py`](https://github.com/ramblinghermit0403/agent_bridge/blob/main/backend/app/services/agent/agent_orchestrator.py)
+
+
 
 The **Agent Orchestrator** is the brain of the application. It uses [LangGraph](https://langchain-ai.github.io/langgraph/) to define a cyclic state graph that manages the conversation flow between the User, the LLM, and the Tools.
 
@@ -43,7 +45,9 @@ A compatibility wrapper that makes the LangGraph executable look like a standard
 
 ## Agent Factory
 
-**File**: [`agent_factory.py`](../backend/app/services/agent/agent_factory.py)
+**File**: [`agent_factory.py`](https://github.com/ramblinghermit0403/agent_bridge/blob/main/backend/app/services/agent/agent_factory.py)
+
+
 
 Responsible for assembling a unique agent instance for every request, tailored to the specific user's context (connected tools, permissions, etc.).
 
@@ -68,7 +72,9 @@ async def create_final_agent_pipeline(
 
 ## Dynamic Tools
 
-**File**: [`tools.py`](../backend/app/services/agent/tools.py)
+**File**: [`tools.py`](https://github.com/ramblinghermit0403/agent_bridge/blob/main/backend/app/services/agent/tools.py)
+
+
 
 This module handles the complex logic of converting remote MCP tool definitions (JSON schemas) into executable Python functions (LangChain `StructuredTool` objects).
 
@@ -98,7 +104,9 @@ Wraps the raw MCP `connector.run_tool` call with **Safety & Robustness** layers:
 
 ## LLM Factory
 
-**File**: [`llm_factory.py`](../backend/app/services/agent/llm_factory.py)
+**File**: [`llm_factory.py`](https://github.com/ramblinghermit0403/agent_bridge/blob/main/backend/app/services/agent/llm_factory.py)
+
+
 
 ### `get_llm`
 

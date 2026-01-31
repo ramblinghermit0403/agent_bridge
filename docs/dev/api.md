@@ -5,7 +5,8 @@ The Agent Bridge exposes a RESTful API built with FastAPI.
 ## Interactive Documentation
 When the server is running locally, you can access the interactive Swagger UI:
 
-**[http://localhost:8001/docs](http://localhost:8001/docs)**
+**`http://localhost:8001/docs`**
+
 
 ## Authentication
 Most endpoints require a Bearer Token.

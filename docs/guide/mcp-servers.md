@@ -35,7 +35,8 @@ If the server requires authentication, toggle **Requires OAuth?** and fill in:
 | **Client Secret** | Your OAuth application's Client Secret |
 | **Scope** | Permission scopes (e.g., `read:user`) |
 
-> **Need credentials?** Click the "How to obtain these?" link to see the [Client Registration Guide](../CLIENT_REGISTRATION.md).
+> **Need credentials?** Refer to the official documentation for [Notion](https://developers.notion.com/docs/authorization) or [GitHub](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app).
+
 
 **Advanced Options** (toggle to reveal):
 *   **Authorization URL** - Manual OAuth authorize endpoint

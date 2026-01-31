@@ -16,6 +16,9 @@ node_modules
 dist
 dist-ssr
 coverage
+docs/.vitepress/dist
+docs/.vitepress/cache
+
 *.local
 .env
 

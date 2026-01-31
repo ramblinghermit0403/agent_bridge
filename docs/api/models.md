@@ -8,7 +8,9 @@ Location: `backend/app/models/`
 
 ## User Model
 
-**File**: [`user.py`](../backend/app/models/user.py)
+**File**: [`user.py`](https://github.com/ramblinghermit0403/agent_bridge/blob/main/backend/app/models/user.py)
+
+
 
 Represents the identity of an actor in the system. The system supports both authenticated "Registered Users" and temporary "Guest Users".
 
@@ -29,7 +31,9 @@ class User(Base):
 
 ## MCP Server Settings
 
-**File**: [`settings.py`](../backend/app/models/settings.py)
+**File**: [`settings.py`](https://github.com/ramblinghermit0403/agent_bridge/blob/main/backend/app/models/settings.py)
+
+
 
 This is a critical model that stores the **User Configuration** for external tools. It holds the "keys to the kingdom" (auth tokens), so security here is paramount.
 
@@ -50,7 +54,9 @@ class McpServerSetting(Base):
 
 ## Tool Permissions
 
-**File**: [`tool_permissions.py`](../backend/app/models/tool_permissions.py)
+**File**: [`tool_permissions.py`](https://github.com/ramblinghermit0403/agent_bridge/blob/main/backend/app/models/tool_permissions.py)
+
+
 
 The system checks these records before allowing the Agent to invoke *any* tool.
 
