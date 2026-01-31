@@ -24,14 +24,6 @@ For detailed configuration guides, please see:
 - [**Expansion Guide**](docs/dev/expansion.md): How to add new MCP servers, LLM providers, and features.
 - [**Prompts & Persona**](docs/dev/agent-core.md): Customizing the agent's behavior and system prompts.
 
-
-
-## 🎥 Walkthrough
-
-
-
-
-
 ## 📁 Project Structure
 
 ```text
