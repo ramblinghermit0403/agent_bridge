@@ -32,12 +32,15 @@ import {
   faEllipsisV,
   faPen,
   faSyncAlt,
-  faBolt
+  faBolt,
+  faThumbsUp,
+  faThumbsDown,
+  faPlug
   // For the Save button
 } from '@fortawesome/free-solid-svg-icons'
 
 /* add icons to the library */
-library.add(faCube, faSyncAlt, faFileAlt, faBullhorn, faPaperPlane, faTrash, faArrowLeft, faGear, faBolt, faEllipsisV, faPen, faGithub, faLinkedin, faTwitter)
+library.add(faCube, faSyncAlt, faFileAlt, faBullhorn, faPaperPlane, faTrash, faArrowLeft, faGear, faBolt, faEllipsisV, faPen, faGithub, faLinkedin, faTwitter, faThumbsUp, faThumbsDown, faPlug)
 
 const app = createApp(App)
 app.component('ToasterVue', Toaster)

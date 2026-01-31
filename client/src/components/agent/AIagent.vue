@@ -32,15 +32,21 @@
             <div v-else>{{ msg.text }}</div>
           </div>
 
-          <div class="message-actions">
+          <div class="message-actions" v-if="shouldShowActions(msg, index)">
             <!-- Actions similar to before -->
              <button @click="copyMessage(msg.text, index)" class="action-button" title="Copy">
               <svg v-if="copiedMessageIndex === index" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
               <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
             </button>
             <template v-if="msg.role === 'agent'">
-              <button @click="handleFeedback(index, 'like')" class="action-button" title="Good response"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" :class="{'feedback-like' : msg.feedback === 'like'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.085a2 2 0 00-1.736.93L5.5 8m7 2v5m0 0h-4" /></svg></button>
-              <button @click="handleFeedback(index, 'dislike')" class="action-button" title="Bad response"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" :class="{'feedback-dislike' : msg.feedback === 'dislike'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 14H5.236a2 2 0 01-1.789-2.894l3.5-7A2 2 0 018.736 3h4.017c.163 0 .326.02.485.06L17 4m-7 10v-5m0 0h4" /></svg></button>
+              <button @click="handleFeedback(index, 'like')" class="feedback-button" :class="{'active-good' : msg.feedback === 'like'}" title="Good response">
+                <font-awesome-icon icon="thumbs-up" class="feedback-icon" />
+                <span class="feedback-label">Good</span>
+              </button>
+              <button @click="handleFeedback(index, 'dislike')" class="feedback-button" :class="{'active-bad' : msg.feedback === 'dislike'}" title="Bad response">
+                <font-awesome-icon icon="thumbs-down" class="feedback-icon" />
+                <span class="feedback-label">Bad</span>
+              </button>
             </template>
           </div>
         </div>
@@ -72,7 +78,7 @@
       <div class="centered-content">
 
         <div v-if="messages.length === 0 && !isTyping && !isAgentProcessing" class="greeting-wrapper">
-            <h1 class="greeting-line-1"><span class="greeting-icon">✨</span> Hi {{ userName || 'there' }}</h1>
+            <h1 class="greeting-line-1"><img src="/favicon.ico" alt="AgentBridge" class="greeting-icon-img" /> Hi {{ userName || 'there' }}</h1>
             <h2 class="greeting-line-2">Ready to make some magic?</h2>
         </div>
         <div class="input-area">
@@ -87,9 +93,12 @@
                 <!-- <button @click="triggerFileInput" class="attach-button" :disabled="isAgentProcessing"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" /></svg></button>
                 <input ref="fileInput" type="file" @change="handleFile" style="display: none" /> -->
                 
-                <select v-model="selectedModel" class="model-select" :disabled="isAgentProcessing">
-                    <option v-for="model in availableModels" :key="model.id" :value="model">{{ model.name }}</option>
-                </select>
+                <ModelSelector
+                  v-model="selectedModel"
+                  :options="availableModels"
+                  :disabled="isAgentProcessing"
+                  :placement="isCentered ? 'bottom' : 'top'"
+                />
             </div>
             <button @click="sendMessage" class="send-button" :disabled="(!inputMessage.trim() && !attachedFile) || isAgentProcessing"><span>Send</span><span class="shortcut-keys"><kbd>Ctrl</kbd><span>+</span><kbd>↵</kbd></span></button>
           </div>
@@ -111,7 +120,8 @@ import MarkdownIt from 'markdown-it';
 
 export default {
   components: {
-    ToolPermissionMessage: defineAsyncComponent(() => import('./ToolPermissionMessage.vue'))
+    ToolPermissionMessage: defineAsyncComponent(() => import('./ToolPermissionMessage.vue')),
+    ModelSelector: defineAsyncComponent(() => import('./ModelSelector.vue'))
   },
   emits: ['chat-created'],
   setup() {
@@ -144,6 +154,9 @@ export default {
   },
 
   computed: {
+    isCentered() {
+      return this.messages.length === 0 && !this.isTyping && !this.isAgentProcessing;
+    },
     isWaitingForApproval() {
         return this.messages.some(m => m.role === 'permission_request');
     },
@@ -183,6 +196,19 @@ export default {
     }
   },
   methods: {
+    shouldShowActions(msg, index) {
+      if (msg.role === 'user') return true;
+      
+      // 1. If currently streaming this message, hide
+      if (this.isAgentProcessing && index === this.currentAgentMessageIndex) return false;
+      
+      // 2. If followed by permission request, hide
+      const nextMsg = this.messages[index + 1];
+      if (nextMsg && nextMsg.role === 'permission_request') return false;
+      
+      return true;
+    },
+
     async loadConversation() {
       if (this.eventSource) {
         this.eventSource.close();
@@ -339,7 +365,13 @@ export default {
     },
     handleFeedback(index, type) {
       const message = this.messages[index];
-      message.feedback = message.feedback === type ? null : type;
+      const previousFeedback = message.feedback;
+      message.feedback = previousFeedback === type ? null : type;
+      
+      if (message.feedback) {
+          const status = message.feedback === 'like' ? 'good' : 'bad';
+          // this.toast.info(`Feedback marked as ${status}`, { timeout: 1500 });
+      }
     },
     
     // Tool Approval Handlers
@@ -682,17 +714,53 @@ export default {
 .justify-start { justify-content: flex-start; }
 .flex.flex-col { display:flex; flex-direction: column;}
 .items-end { align-items: flex-end; }
-.items-start { align-items: flex-start; }
+.items-start { align-items: flex-start; min-width: 0; }
 
-.message-bubble { display: inline-block; padding: 0.75rem 1rem; word-break: break-word; }
+.message-bubble { display: inline-block; padding: 0.75rem 1rem; word-break: break-word; max-width: 100%; }
 .user-bubble { max-width: 32rem; background-color: var(--text-primary); color: var(--bg-primary); border-radius: 8px; }
-.agent-bubble { width: 100%; color: var(--text-primary); }
+.agent-bubble { display: block; width: 100%; color: var(--text-primary); }
 
 .message-actions { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; }
-.action-button { padding: 0.25rem; border-radius: 9999px; color: var(--text-secondary); transition: background-color 0.2s, color 0.2s; }
+.action-button { display: flex; align-items: center; justify-content: center; width: 2.25rem; height: 2.25rem; border-radius: 0.5rem; color: var(--text-secondary); transition: all 0.2s; background: transparent; }
 .action-button:hover { background-color: var(--bg-secondary); color: var(--text-primary); }
-.feedback-like { color: var(--text-primary) !important; opacity: 1; }
-.feedback-dislike { color: var(--text-primary) !important; opacity: 1; }
+
+.feedback-button {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 0.5rem;
+  color: var(--text-secondary);
+  background: transparent;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.feedback-button:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  opacity: 1;
+}
+
+.feedback-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.feedback-icon {
+  font-size: 0.85rem;
+}
+
+.active-good {
+  color: #10b981 !important;
+  opacity: 1;
+}
+
+.active-bad {
+  color: #ef4444 !important;
+  opacity: 1;
+}
 
 .typing-indicator { display: flex; align-items: center; height: 24px; }
 .typing-dot { display: inline-block; width: 0.5rem; height: 0.5rem; background-color: var(--text-secondary); border-radius: 9999px; margin: 0 0.25rem; animation: typing-blink 1.4s infinite both; }
@@ -722,9 +790,18 @@ export default {
   letter-spacing: -0.03em;
 }
 
-.greeting-icon {
-  font-size: 1.75rem; /* Reduced from 2rem */
-  color: var(--text-primary);
+.greeting-icon-img {
+  height: 1.25em;
+  width: auto;
+  margin-right: 0.5rem;
+  transition: all var(--transition-speed) var(--transition-ease);
+  /* Default for light theme (assuming logo is dark) */
+  filter: none;
+}
+
+:global(.dark-theme .greeting-icon-img) {
+  /* Force logo to white in dark mode */
+  filter: brightness(0) invert(1);
 }
 
 .greeting-line-2 {
@@ -801,9 +878,9 @@ kbd { background-color: rgba(255, 255, 255, 0.2); border-radius: 4px; border: 1p
 .agent-bubble :deep(ul), .agent-bubble :deep(ol) { margin: 0.5rem 0; padding-left: 1.5rem; list-style-position: outside; }
 .agent-bubble :deep(ul) { list-style-type: disc; } .agent-bubble :deep(ol) { list-style-type: decimal; }
 .agent-bubble :deep(li) { margin-bottom: 0.25rem; }
-.agent-bubble :deep(pre) { background-color: #1f2937; color: #f9fafb; border-radius: 0.5rem; margin: 1rem 0; padding: 1rem; overflow-x: auto; }
-.agent-bubble :deep(code) { background-color: var(--bg-secondary); color: #db2777; border-radius: 0.25rem; padding: 2px 4px; font-family: monospace; font-size: 0.875rem; }
-.agent-bubble :deep(pre code) { background-color: transparent; color: inherit; padding: 0; }
+.agent-bubble :deep(pre) { background-color: #1f2937; color: #f9fafb; border-radius: 0.5rem; margin: 1rem 0; padding: 1rem; overflow-x: auto; max-width: 100%; white-space: pre; }
+.agent-bubble :deep(code) { background-color: var(--bg-secondary); color: #db2777; border-radius: 0.25rem; padding: 2px 4px; font-family: monospace; font-size: 0.875rem; word-break: break-word; }
+.agent-bubble :deep(pre code) { background-color: transparent; color: inherit; padding: 0; word-break: normal; }
 .scratchpad-area { margin-top: 0.5rem; width: 100%; max-width: 48rem; text-align: left; font-size: 0.75rem; color: var(--text-secondary); }
 .scratchpad-area details { background-color: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 0.5rem 1rem; cursor: pointer; }
 .scratchpad-area summary { font-weight: 600; color: var(--text-primary); list-style: inside; }

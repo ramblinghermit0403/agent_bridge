@@ -600,7 +600,7 @@ watch(isLoggedIn, (newVal) => {
   height: 40px;
   border-radius: 50%;
   background-color: var(--accent-color);
-  color: white;
+  color: var(--bg-primary);
   display: flex;
   align-items: center;
   justify-content: center;
