@@ -3,6 +3,8 @@ import { createRouter, createWebHistory } from 'vue-router'
 import AIagent from './components/agent/AIagent.vue'
 import dashboard from './view/dashboard.vue' // Assuming dashboard is your main layout component
 import settings from './components/settings/settings.vue'
+import UserProfile from './components/settings/UserProfile.vue'
+import Connections from './components/settings/Connections.vue'
 import LearnMoreView from './view/LearnMoreView.vue'; // <-- IMPORT the new view
 import login from './components/login/login.vue' // Assuming you have a login component
 import { useToast } from 'vue-toastification'
@@ -33,7 +35,7 @@ const routes = [
   {
     path: '/', // Keep the path as '/' if dashboard is your main layout that wraps everything
     component: dashboard, // The dashboard component acts as the layout/wrapper
-    // meta: { requiresAuth: true }, // Uncomment if the entire dashboard requires auth
+    meta: { requiresAuth: true },
     children: [
       {
         path: 'dashboard',
@@ -42,7 +44,15 @@ const routes = [
       // The /agent route, which is now the default child of the main layout
       { path: 'agent', component: AIagent, name: 'AIagent' },
       // Other routes within the dashboard layout
-      { path: 'settings', component: settings },
+      {
+        path: 'settings',
+        component: settings,
+        children: [
+          { path: '', redirect: '/settings/user' },
+          { path: 'user', component: UserProfile, name: 'UserProfile' },
+          { path: 'connections', component: Connections, name: 'Connections' }
+        ]
+      },
       {
         path: '/learn-more',
         component: LearnMoreView, // <-- Use the imported LearnMoreView component
@@ -65,34 +75,15 @@ const router = createRouter({
   routes
 })
 
-// Navigation guard (no changes needed here for the routing logic)
+// Navigation guard
 router.beforeEach(async (to, from, next) => {
-  let token = localStorage.getItem('token')
+  const token = localStorage.getItem('token')
 
-  // Auto-init Guest if no token
-  if (!token) {
-    try {
-      const BACKEND_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
-      const res = await fetch(`${BACKEND_BASE_URL}/auth/login/guest`, { method: 'POST' });
-      if (res.ok) {
-        const data = await res.json();
-        localStorage.setItem('token', data.access_token);
-        localStorage.setItem('user', JSON.stringify(data.user));
-        token = data.access_token;
-        // Optional: Toast "Entered as Guest"
-      } else {
-        console.error("Failed to init guest");
-      }
-    } catch (e) {
-      console.error("Error init guest", e);
-    }
-  }
-
-  // Check Auth Requirements (if any are active)
+  // Check Auth Requirements
   if (to.matched.some((record) => record.meta.requiresAuth)) {
     if (!token) {
-      toast.error('Session expired. Please log in again.')
-      return next('/login') // Fallback to login if guest failed
+      toast.error('Authentication required. Please log in.')
+      return next('/login')
     }
 
     try {
@@ -101,8 +92,6 @@ router.beforeEach(async (to, from, next) => {
 
       if (payload.exp < now) {
         localStorage.removeItem('token')
-        // Try guest again? Or just redirect login.
-        // For simplicity, redirect login if expired.
         toast.error('Session expired. Please log in again.')
         return next('/login')
       }
