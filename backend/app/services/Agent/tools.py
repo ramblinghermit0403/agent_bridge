@@ -59,10 +59,17 @@ def create_tool_func(tool_name: str, connector, pydantic_model=None, user_id: st
                     # Logic to block and wait for approval
                     approval_name = unique_tool_name if unique_tool_name else tool_name
                     
+                    # Attempt to extract server name
+                    derived_server_name = "unknown"
+                    if "_" in approval_name:
+                         parts = approval_name.split("_", 1)
+                         if len(parts) == 2:
+                             derived_server_name = parts[0]
+
                     approval_id = PendingApproval.create(
                         user_id=user_id,
                         tool_name=approval_name, 
-                        server_name="unknown", # We can improve this later
+                        server_name=derived_server_name, 
                         tool_input=kwargs
                     )
                     

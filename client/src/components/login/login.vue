@@ -3,7 +3,10 @@
     <!-- Left Side: Branding -->
     <div class="auth-brand">
       <div class="brand-content">
-        <h1 class="brand-title">AgentBridge</h1>
+        <div class="brand-header-inline">
+          <img src="/favicon.ico" class="brand-logo" alt="AgentBridge Logo">
+          <h1 class="brand-title">AgentBridge</h1>
+        </div>
         <p class="brand-tagline">Connect. Orchestrate. Automate.</p>
         <div class="brand-features">
           <div class="feature-item">→ Multi-server orchestration</div>
@@ -180,12 +183,7 @@ const handleLogin = async () => {
 
 const handleRegister = async () => {
   const payload = { username: registerForm.username, email: registerForm.email, password: registerForm.password };
-  
-  const token = localStorage.getItem('token');
   const headers = { 'Content-Type': 'application/json' };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
 
   try {
     const response = await fetch(`${api_url}/register`, {
@@ -234,11 +232,37 @@ const handleRegister = async () => {
   max-width: 500px;
 }
 
+.brand-header-inline {
+  display: flex;
+  align-items: center; /* Ensures vertical centering */
+  gap: 1.5rem; /* Increased gap slightly for balance */
+  margin-bottom: 1rem;
+}
+
 .brand-title {
   font-size: 3.5rem;
   font-weight: 700;
-  margin: 0 0 1rem 0;
+  margin: 0;
   letter-spacing: -0.02em;
+  line-height: 1; /* Fix line-height to ensure true centering */
+}
+
+.brand-logo {
+  width: 64px; /* Increased size */
+  height: 64px; /* Increased size */
+  object-fit: contain;
+  transition: filter var(--transition-speed) var(--transition-ease);
+}
+
+/* Since .auth-brand uses var(--text-primary) as background, 
+   it is black in light mode and white in dark mode.
+   We assume the favicon is black by default. */
+.light-theme .brand-logo {
+  filter: invert(1);
+}
+
+.dark-theme .brand-logo {
+  filter: invert(0);
 }
 
 .brand-tagline {

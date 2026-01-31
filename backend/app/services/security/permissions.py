@@ -27,6 +27,7 @@ class PendingApproval:
                 if data['tool_input'] == tool_input:
                     # Update timestamp to keep it fresh
                     data['created_at'] = datetime.utcnow()
+                    print(f"DEBUG: PendingApproval DEDUPLICATED existing {pid} for {tool_name}")
                     return pid
 
         if not approval_id:
@@ -41,6 +42,7 @@ class PendingApproval:
             'approval_type': None,  # 'once' or 'always'
             'created_at': datetime.utcnow() # Add timestamp for filtering stale requests
         }
+        print(f"DEBUG: PendingApproval CREATED {approval_id} for {tool_name}")
         return approval_id
     
     @classmethod
@@ -54,17 +56,25 @@ class PendingApproval:
         if approval_id in cls._pending:
             cls._pending[approval_id]['approved'] = True
             cls._pending[approval_id]['approval_type'] = approval_type
+            print(f"DEBUG: PendingApproval APPROVED {approval_id}")
+        else:
+            print(f"DEBUG: PendingApproval APPROVED failed - {approval_id} not found")
     
     @classmethod
     def deny(cls, approval_id: str):
         """Deny a pending request"""
         if approval_id in cls._pending:
             cls._pending[approval_id]['approved'] = False
+            print(f"DEBUG: PendingApproval DENIED {approval_id}")
+        else:
+            print(f"DEBUG: PendingApproval DENY failed - {approval_id} not found")
     
     @classmethod
     def remove(cls, approval_id: str):
         """Remove a pending approval"""
-        cls._pending.pop(approval_id, None)
+        if approval_id in cls._pending:
+            cls._pending.pop(approval_id, None)
+            print(f"DEBUG: PendingApproval REMOVED {approval_id}")
 
 
 async def check_tool_permission(db: AsyncSession, user_id: str, server_setting_id: int, tool_name: str) -> bool:

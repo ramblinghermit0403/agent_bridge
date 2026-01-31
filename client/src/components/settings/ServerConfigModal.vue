@@ -15,8 +15,8 @@
         </div>
         <div class="info-row">
           <span class="label">Status:</span>
-          <span :class="['status-badge', isActive ? 'active' : 'inactive']">
-            {{ isActive ? 'Active' : 'Inactive' }}
+          <span :class="['status-badge', statusClass]">
+            {{ statusLabel }}
           </span>
         </div>
       </div>
@@ -43,7 +43,26 @@
           <div v-for="tool in tools" :key="tool.name" class="tool-item">
             <div class="tool-info">
               <strong class="tool-name">{{ tool.name }}</strong>
-              <p class="tool-description">{{ tool.description || 'No description available' }}</p>
+              <div class="tool-desc-wrapper">
+                <p 
+                    class="tool-description" 
+                    :class="{ 'expanded': tool._expanded }"
+                >
+                    {{ tool.description || 'No description available' }}
+                </p>
+                <button 
+                    v-if="(tool.description || '').length > 60" 
+                    @click="tool._expanded = !tool._expanded" 
+                    class="expand-btn"
+                >
+                    <svg 
+                        :class="{ 'rotated': tool._expanded }"
+                        xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    >
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                </button>
+              </div>
             </div>
             <label class="toggle-switch">
               <input 
@@ -76,17 +95,23 @@
         <p v-else class="empty-approvals">No auto-approved tools for this server.</p>
       </div>
 
-      <!-- Footer -->
-      <div class="modal-footer">
-        <button @click="closeModal" class="footer-btn secondary">Close</button>
-      </div>
+
     </div>
+    
+    <ConfirmationModal
+      :isOpen="showConfirm"
+      :title="'Confirm Revocation'"
+      :message="confirmMessage"
+      @cancel="cancelRevoke"
+      @confirm="executeRevoke"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
 import { useToast } from 'vue-toastification';
+import ConfirmationModal from './ConfirmationModal.vue';
 
 const props = defineProps({
   isOpen: Boolean,
@@ -103,6 +128,26 @@ const tools = ref([]);
 const serverApprovals = ref([]);
 const loading = ref(false);
 const error = ref(null);
+
+// Computed Status
+const statusClass = computed(() => {
+  if (!props.isActive) return 'disabled';
+  if (loading.value) return 'checking';
+  if (error.value) return 'offline';
+  return 'online';
+});
+
+const statusLabel = computed(() => {
+  if (!props.isActive) return 'Disabled';
+  if (loading.value) return 'Connecting...';
+  if (error.value) return 'Offline';
+  return 'Online';
+});
+
+// Confirmation State
+const showConfirm = ref(false);
+const confirmMessage = ref('');
+const pendingRevokeTool = ref(null);
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
 
@@ -152,7 +197,9 @@ const loadTools = async () => {
     }
 
     const data = await response.json();
-    tools.value = Array.isArray(data) ? data : (data.tools || []);
+    const loadedTools = Array.isArray(data) ? data : (data.tools || []);
+    // Initialize expanded state for UI
+    tools.value = loadedTools.map(t => ({ ...t, _expanded: false }));
   } catch (err) {
     error.value = err.message;
     toast.error(`Error loading tools: ${err.message}`);
@@ -227,8 +274,22 @@ const fetchApprovals = async () => {
   }
 };
 
-const revokeApproval = async (toolName) => {
-  if (!confirm(`Revoke "Always Allow" for ${toolName}?`)) return;
+const revokeApproval = (toolName) => {
+  pendingRevokeTool.value = toolName;
+  confirmMessage.value = `Revoke "Always Allow" for ${toolName}?`;
+  showConfirm.value = true;
+};
+
+const cancelRevoke = () => {
+  showConfirm.value = false;
+  pendingRevokeTool.value = null;
+};
+
+const executeRevoke = async () => {
+  if (!pendingRevokeTool.value) return;
+  const toolName = pendingRevokeTool.value;
+  showConfirm.value = false;
+
   const headers = getAuthHeaders();
   if (!headers) return;
 
@@ -247,6 +308,8 @@ const revokeApproval = async (toolName) => {
     }
   } catch (err) {
     toast.error(`Error: ${err.message}`);
+  } finally {
+    pendingRevokeTool.value = null;
   }
 };
 
@@ -282,7 +345,7 @@ watch(() => props.isOpen, (newVal) => {
   border: 1px solid var(--border-color);
   border-radius: 8px;
   width: 90%;
-  max-width: 600px;
+  max-width: 500px;
   max-height: 80vh;
   display: flex;
   flex-direction: column;
@@ -293,13 +356,13 @@ watch(() => props.isOpen, (newVal) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1.5rem;
+  padding: 1rem 1.5rem;
   border-bottom: 1px solid var(--border-color);
 }
 
 .modal-header h2 {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: 1.125rem;
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -325,7 +388,7 @@ watch(() => props.isOpen, (newVal) => {
 }
 
 .server-info {
-  padding: 1.5rem;
+  padding: 1rem 1.5rem;
   border-bottom: 1px solid var(--border-color);
   background-color: var(--bg-secondary);
 }
@@ -353,32 +416,50 @@ watch(() => props.isOpen, (newVal) => {
 }
 
 .status-badge {
-  padding: 0.25rem 0.75rem;
-  border-radius: 4px;
-  font-size: 0.875rem;
+  font-size: 0.85rem;
   font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.status-badge.active {
-  background-color: var(--text-primary);
-  color: var(--bg-primary);
+.status-badge.online {
+  color: var(--text-primary);
 }
 
-.status-badge.inactive {
-  background-color: var(--bg-secondary);
+.status-badge.online::before {
+  content: '';
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #10b981; /* Green-500 */
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+.status-badge.offline {
+  color: #ef4444;
+}
+
+.status-badge.checking {
   color: var(--text-secondary);
-  border: 1px solid var(--border-color);
+  font-style: italic;
+  font-weight: 400;
+}
+
+.status-badge.disabled {
+  color: var(--text-secondary);
 }
 
 .tools-section {
   flex: 1;
   overflow-y: auto;
-  padding: 1.5rem;
+  padding: 1rem 1.5rem;
 }
 
 .tools-section h3 {
-  margin: 0 0 1rem 0;
-  font-size: 1.125rem;
+  margin: 0 0 0.75rem 0;
+  font-size: 1rem;
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -432,7 +513,7 @@ watch(() => props.isOpen, (newVal) => {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  padding: 1rem;
+  padding: 0.75rem;
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 6px;
@@ -450,27 +531,70 @@ watch(() => props.isOpen, (newVal) => {
 
 .tool-name {
   display: block;
-  font-size: 1rem;
+  font-size: 0.9rem;
   color: var(--text-primary);
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.2rem;
+}
+
+.tool-desc-wrapper {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
 }
 
 .tool-description {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: 0.8rem;
   color: var(--text-secondary);
   line-height: 1.4;
+  
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word; /* Handle long words/urls */
+}
+
+.tool-description.expanded {
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
+
+.expand-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+  transition: color 0.2s;
+}
+
+.expand-btn:hover {
+  color: var(--text-primary);
+}
+
+.expand-btn svg {
+  transition: transform 0.2s ease;
+}
+
+.expand-btn svg.rotated {
+  transform: rotate(180deg);
 }
 
 /* Approvals Section */
 .approvals-section {
-  padding: 1.5rem;
+  padding: 1rem 1.5rem;
   border-top: 1px solid var(--border-color);
 }
 
 .approvals-section h3 {
   margin: 0 0 0.5rem 0;
-  font-size: 1.125rem;
+  font-size: 1rem;
   font-weight: 600;
   color: var(--text-primary);
 }

@@ -2,7 +2,9 @@
   <div class="permission-message">
     <!-- Header -->
     <div class="message-header">
-      <div class="header-icon">⚠️</div>
+      <div class="header-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+      </div>
       <div class="header-text">
         <h3>Permission Required</h3>
         <p>The agent needs your approval to execute this tool.</p>
@@ -120,48 +122,86 @@ const allowAlways = () => {
 }
 
 .header-icon {
-  font-size: 1.5rem;
+  flex-shrink: 0;
+  color: #F59E0B; /* Amber 500 */
 }
 
 .header-text h3 {
   margin: 0;
   font-size: 1rem;
   font-weight: 600;
-  color: var(--text-primary);
+  color: #92400E; /* Amber 800 */
+  line-height: 1.4;
 }
 
 .header-text p {
   margin: 0.25rem 0 0 0;
-  font-size: 0.85rem;
-  color: var(--text-secondary);
+  font-size: 0.875rem;
+  color: #B45309; /* Amber 700 */
+}
+
+/* Dark Theme Overrides */
+/* Assuming usage of .dark-theme class or media query. Using media query for robustness if class not present on body */
+@media (prefers-color-scheme: dark) {
+  .permission-message {
+    background-color: #1e1e1e; /* Darker card background */
+    border-color: #333;
+  }
+}
+
+:global(.dark-theme) .message-header,
+@media (prefers-color-scheme: dark) {
+    .message-header {
+        background-color: rgba(245, 158, 11, 0.15); /* Dark Amber Tint */
+        border-bottom: 1px solid rgba(245, 158, 11, 0.3);
+    }
+    .header-icon {
+        color: #FBBF24; /* Amber 400 */
+    }
+    .header-text h3 {
+        color: #FEF3C7; /* Amber 100 - High Contrast on Dark */
+    }
+    .header-text p {
+        color: #FDE68A; /* Amber 200 */
+    }
 }
 
 .tool-info {
-  padding: 1rem;
+  padding: 1.25rem;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  font-size: 0.9rem;
+  gap: 0.75rem;
+  font-size: 0.95rem;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .info-row {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.75rem;
+  align-items: baseline;
 }
 
 .label {
   font-weight: 600;
   color: var(--text-secondary);
   min-width: 60px;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .value {
   color: var(--text-primary);
-  font-family: monospace;
+  font-family: 'SF Mono', SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+  background: var(--bg-primary);
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  font-size: 0.9rem;
 }
 
 .payload-preview {
-  padding: 0 1rem 1rem 1rem;
+  padding: 0 1.25rem 1.25rem 1.25rem;
 }
 
 .payload-preview details summary {
@@ -169,7 +209,9 @@ const allowAlways = () => {
   color: var(--text-secondary);
   font-size: 0.85rem;
   font-weight: 500;
-  margin-bottom: 0.5rem;
+  margin: 1rem 0 0.5rem 0;
+  user-select: none;
+  transition: color 0.2s;
 }
 
 .payload-preview details summary:hover {
@@ -178,37 +220,41 @@ const allowAlways = () => {
 
 .json-code {
   background-color: var(--bg-primary);
-  padding: 0.75rem;
-  border-radius: 4px;
-  font-size: 0.8rem;
-  color: var(--text-secondary);
+  padding: 1rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: var(--text-primary);
   overflow-x: auto;
   margin: 0;
   border: 1px solid var(--border-color);
+  font-family: 'SF Mono', SFMono-Regular, Consolas, monospace;
 }
 
 .message-actions {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem;
+  padding: 1rem 1.25rem;
+  background-color: var(--bg-primary); 
   border-top: 1px solid var(--border-color);
-  background-color: var(--bg-primary); /* Slightly distinct from body? */
 }
 
 .allow-group {
     display: flex;
-    gap: 0.5rem;
+    gap: 0.75rem;
 }
 
 .btn {
   padding: 0.5rem 1rem;
   border-radius: 6px;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
   border: 1px solid transparent;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  height: 2.25rem;
 }
 
 .deny-btn {
@@ -218,18 +264,29 @@ const allowAlways = () => {
 }
 
 .deny-btn:hover {
-  background-color: #fee2e2; /* Light red */
-  color: #991b1b;
-  border-color: #fecaca;
+  background-color: #FEF2F2; /* Red 50 */
+  color: #DC2626; /* Red 600 */
+  border-color: #FECACA; /* Red 200 */
 }
+:global(.dark-theme) .deny-btn:hover,
+@media (prefers-color-scheme: dark) {
+    .deny-btn:hover {
+        background-color: rgba(220, 38, 38, 0.15);
+        border-color: rgba(220, 38, 38, 0.3);
+        color: #F87171;
+    }
+}
+
 
 .allow-btn {
   background-color: var(--text-primary);
   color: var(--bg-primary);
+  border: 1px solid var(--text-primary);
 }
 
 .allow-btn:hover {
   opacity: 0.9;
+  transform: translateY(-1px);
 }
 
 .allow-always-btn {

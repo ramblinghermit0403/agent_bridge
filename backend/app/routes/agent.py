@@ -101,6 +101,15 @@ async def ask_agent_stream(
     # llm_formatter = get_llm(model_provider=model_provider, model_name=model)
     # formatter_chain = formatter_prompt | llm_formatter | StrOutputParser()
 
+    # --- SECURITY FIX: Verify Session Ownership ---
+    if session_id:
+        owner_id = await crud_storage.get_conversation_owner(session_id)
+        # If session exists (owner_id is not None) and user is not owner, DENY access.
+        if owner_id and str(owner_id) != str(current_user.id):
+            logger.warning(f"Unauthorized access attempt: User {current_user.id} tried to access session {session_id} owned by {owner_id}")
+            raise HTTPException(status_code=403, detail="You do not have permission to access this conversation.")
+    # -----------------------------------------------
+
     # 2. Get cached or create new agent
     try:
         agent_executor, is_cache_hit = await get_or_create_agent(

@@ -43,6 +43,12 @@ async def get_user_servers(db: AsyncSession, user_id: str) -> Dict[str, Dict[str
             except Exception:
                 logger.warning(f"Failed to parse credentials for server {setting.server_name}")
 
+        # Merge with top-level columns if they exist (allows easier manual overrides/fixes)
+        if setting.client_id: oauth_config["client_id"] = setting.client_id
+        if setting.client_secret: oauth_config["client_secret"] = setting.client_secret
+        if setting.authorization_url: oauth_config["authorization_url"] = setting.authorization_url
+        if setting.token_url: oauth_config["token_url"] = setting.token_url
+
         server_dict[setting.server_name] = {
             "id": setting.id,
             "url": setting.server_url,

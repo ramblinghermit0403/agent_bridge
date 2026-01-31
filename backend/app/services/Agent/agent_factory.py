@@ -11,6 +11,8 @@ from .prompts import build_agent_prompt, build_langgraph_prompt
 from .llm_factory import get_llm
 from .tools import build_tools_from_servers
 from .memory import get_session_memory
+# Import Checkpointer Factory
+from .checkpointer_factory import get_checkpointer
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -70,11 +72,9 @@ async def create_final_agent_pipeline(
 
     # 4. Create LangGraph Agent
     from .agent_orchestrator import create_graph_agent, GraphAgentExecutor
-    from langgraph.checkpoint.memory import MemorySaver
     
-    # In-memory checkpointer for now (equivalent to previous RAM state but interruptible)
-    # For true production persistence across restarts, use Postgres/Redis checkpointer here.
-    checkpointer = MemorySaver()
+    # Use factory to get the configured checkpointer (Redis, Memory, etc.)
+    checkpointer = get_checkpointer()
     
     # Use LangGraph specific prompt
     langgraph_prompt = build_langgraph_prompt()

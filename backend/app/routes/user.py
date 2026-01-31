@@ -36,55 +36,8 @@ oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/login", auto_error=Fals
 
 @router.post('/register')
 async def new_user(
-    request: Request,
     body: user.newuser,
-    token: str = Depends(oauth2_scheme_optional),
     db: AsyncSession = Depends(database.get_db)):
-    
-    current_guest_user = None
-    if token:
-        try:
-            payload = jwt.decode(token, oauth2.SECRET_KEY, algorithms=[oauth2.ALGORITHM])
-            email: str = payload.get("sub")
-            if email:
-                # Find the user
-                res = await db.execute(select(User).filter(User.email == email))
-                found_user = res.scalars().first()
-                if found_user and found_user.is_guest:
-                    current_guest_user = found_user
-        except Exception as e:
-            # Invalid token or other error, ignore and proceed as fresh signup
-            print(f"Guest token check failed: {e}")
-            pass
-
-    # If we found a valid guest user, update them instead of creating new
-    if current_guest_user:
-        # Check if the NEW email is already taken by SOMEONE ELSE (not the guest)
-        # Note: Guest email is dummy, so it won't match body.email likely.
-        
-        # Check if real email already exists
-        result = await db.execute(
-            select(User).filter(User.email == body.email)
-        )
-        existing_real_user = result.scalars().first()
-        if existing_real_user:
-             raise HTTPException(
-                status_code=400,
-                detail="Account with this email already exists"
-            )
-            
-        # Update Guest
-        current_guest_user.username = body.username
-        current_guest_user.email = body.email
-        current_guest_user.password_hash = hashing.Hash.bcrypt(body.password)
-        current_guest_user.is_guest = False
-        
-        db.add(current_guest_user)
-        await db.commit()
-        await db.refresh(current_guest_user)
-        
-        return {"success": True, "message": "Guest account converted to full account successfully"}
-
     
     # Check for existing user
     result = await db.execute(
@@ -97,22 +50,20 @@ async def new_user(
     if existing_user:
         raise HTTPException(
             status_code=400,
-            detail="Account with this email or phone number already exists"
+            detail="Account with this email already exists"
         )
     
     # Create a new user
-    api_key = secrets.token_hex(32)
     registeruser = User( 
         id=str(uuid.uuid4()),
         username=body.username,
         email=body.email,
-        password_hash=hashing.Hash.bcrypt(body.password),  # Decode the hash to store it as a string
-
+        password_hash=hashing.Hash.bcrypt(body.password),
     )
     
     db.add(registeruser)
-    await db.commit()  # Commit the transaction asynchronously
-    await db.refresh(registeruser)  # Refresh the instance asynchronously
+    await db.commit()
+    await db.refresh(registeruser)
 
     return {"success": True, "message": "Account created successfully"}
 

@@ -9,8 +9,7 @@ class UserCreate(UserBase):
     password: str
 
 class UserOut(UserBase):
-    id: str  # changed to str because auth.py guest login uses UUID string
-    is_guest: bool = False
+    id: str
     class Config:
         from_attributes = True
 

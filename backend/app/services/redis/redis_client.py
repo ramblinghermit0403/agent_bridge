@@ -26,6 +26,17 @@ try:
     redis_client.ping()
     print(f"Successfully connected to Redis at {REDIS_HOST}:{REDIS_PORT} on DB {REDIS_DB}.")
 
+    # --- Async Client Instance ---
+    import redis.asyncio as aioredis
+    async_redis_client = aioredis.Redis(
+        host=REDIS_HOST,
+        port=REDIS_PORT,
+        db=REDIS_DB,
+        decode_responses=True
+    )
+    # We can't easily ping here because we are in top-level sync code, 
+    # but the settings are the same as the sync client.
+
 except redis.exceptions.ConnectionError as e:
     print(f"FATAL: Could not connect to Redis at {REDIS_HOST}:{REDIS_PORT}. Please ensure it is running.", file=sys.stderr)
     print(f"Error details: {e}", file=sys.stderr)

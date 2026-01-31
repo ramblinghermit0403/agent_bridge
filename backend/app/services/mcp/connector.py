@@ -183,6 +183,10 @@ class MCPConnector:
                 raise RequiresAuthenticationError(self.server_name)
         
         # Update credentials
+        # IMPORTANT: Preserve original oauth_config as token_manager doesn't return it
+        if self._credentials and "oauth_config" in self._credentials:
+            new_credentials["oauth_config"] = self._credentials["oauth_config"]
+            
         self._credentials = new_credentials
         self._token = new_credentials.get("access_token")
         
@@ -210,9 +214,13 @@ class MCPConnector:
                     
                     if setting:
                         setting.credentials = json.dumps(new_credentials)
+                        # Also update top-level columns for consistency
+                        if "expires_at" in new_credentials:
+                            setting.expires_at = new_credentials["expires_at"]
+                        
                         session.add(setting)
                         await session.commit()
-                        logger.info(f"Updated credentials in database for {self.server_name} (Setting ID: {self.setting_id})")
+                        logger.info(f"Updated credentials and expires_at in database for {self.server_name} (Setting ID: {self.setting_id})")
                     else:
                         logger.warning(f"Setting ID {self.setting_id} not found in database while trying to update token.")
             except Exception as e:

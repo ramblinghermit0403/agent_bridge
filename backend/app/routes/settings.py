@@ -524,17 +524,14 @@ async def finalize_oauth_flow(
                 logger.warning(f"Finalize: Setting {setting_id} not found/owned.")
                 raise HTTPException(status_code=404, detail="Connection setting not available for update.")
         else:
-            # STRICT CREATE: Block if Name OR URL exists
+            # UPSERT LOGIC: If a server with this Name or URL already exists, update it instead of failing
             stmt = select(McpServerSetting).where(
                 McpServerSetting.user_id == current_user.id,
                 (McpServerSetting.server_name == server_name) | (McpServerSetting.server_url == server_url)
             )
-            existing = (await db.execute(stmt)).scalars().first()
-            if existing:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT, 
-                    detail="A server with this name or URL already exists."
-                )
+            existing_setting = (await db.execute(stmt)).scalars().first()
+            if existing_setting:
+                logger.info(f"Finalize: Found existing server '{existing_setting.server_name}' for upsert.")
 
         # Extract explicitly requested fields from credentials
         import json

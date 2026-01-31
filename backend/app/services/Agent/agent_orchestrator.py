@@ -144,8 +144,21 @@ async def human_review_node(state: AgentState, config: RunnableConfig):
                     break
             
             # CRITICAL FIX: If no pending approval found, block by default (fail-safe)
+            # BUT: Check if the tool was already approved in a previous step/resume?
+            # If we are here, it means the tool call is in the last message.
+            # If we found approval_map in route_tools, we might have skipped this node.
+            # If we are in this node, it means route_tools decided "requires_approval".
+            
             if not found_approval:
+                # Double check: maybe it was approved via standing permission and we shouldn't be here?
+                # Actually, if route_tools sent us here, it created a PendingApproval.
+                # If that PendingApproval is gone, it might mean it was approved and removed?
+                # Or it was never created (bug).
+                
+                # Let's trust PendingApproval state. If it's missing, we must block.
+                logger.warning(f"No pending approval found for tool {tool_name} - blocking by default. User: {user_id}")
                 logger.warning(f"No pending approval found for tool {tool_name} - blocking by default")
+                print(f"DEBUG: human_review_node BLOCKING {tool_name} - No pending record found for user {user_id}")
                 new_messages.append(
                     ToolMessage(
                         content=f"Error: Tool '{tool_name}' requires user approval but no approval record was found.",
@@ -157,6 +170,7 @@ async def human_review_node(state: AgentState, config: RunnableConfig):
     if new_messages:
         return {"messages": new_messages}
     
+    print(f"DEBUG: human_review_node ALLOWING ALL - No blocks generated. Messages to add: {len(new_messages)}")
     return {}
 
 # --- Conditional Logic ---
@@ -259,15 +273,23 @@ async def route_tools(state: AgentState, config: RunnableConfig) -> str:
                     
                     if needs_approval:
                         requires_approval = True
-                        # We must store the EXACT name the agent used, so the UI can match it later
+                        # Attempt to extract server name from tool name (format: ServerName_ToolName)
+                        derived_server_name = "unknown"
+                        if "_" in tool_name:
+                            parts = tool_name.split("_", 1)
+                            if len(parts) == 2:
+                                derived_server_name = parts[0]
+                        
                         approval_id = PendingApproval.create(
                             user_id=user_id,
                             tool_name=tool_name, 
-                            server_name="unknown",
+                            server_name=derived_server_name,
                             tool_input=tool_call.get('args', {})
                         )
                         logger.info(f"Blocking tool {tool_name} for approval. Created PendingApproval ID: {approval_id}")
-                    
+                        print(f"DEBUG: route_tools BLOCKED {tool_name} -> {approval_id}")
+                    else:
+                        print(f"DEBUG: route_tools ALLOWED {tool_name} (pre-approved)")                    
     if requires_approval:
         return "human_review"
     else:
