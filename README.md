@@ -17,16 +17,18 @@
 
 For detailed configuration guides, please see:
 
-- [**Supported MCP Servers**](docs/MCP_SERVERS.md): Setup guide for Figma, GitHub, Notion, and custom servers.
-- [**Supported Providers**](docs/PROVIDERS.md): Configuration for Gemini, Pinecone, and AWS Bedrock.
-- [**Expansion Guide**](docs/EXPANSION.md): How to add new MCP servers, LLM providers, and features.
-- [**Prompts & Persona**](docs/PROMPTS.md): Customizing the agent's behavior and system prompts.
+- [**Supported MCP Servers**](docs/guide/mcp-servers.md): Setup guide for Figma, GitHub, Notion, and custom servers.
+- [**Supported Providers**](docs/guide/llm-providers.md): Configuration for Gemini, Pinecone, and AWS Bedrock.
+- [**Expansion Guide**](docs/dev/expansion.md): How to add new MCP servers, LLM providers, and features.
+- [**Prompts & Persona**](docs/dev/agent-core.md): Customizing the agent's behavior and system prompts.
 
 
 
-## 🎥 Demo
+## 🎥 Walkthrough
 
-[![Agent Bridge Walkthrough](http://img.youtube.com/vi/7w0LObDVEyA/0.jpg)](https://youtu.be/7w0LObDVEyA)
+
+<video src="client/src/assets/tutorial.mp4" controls width="100%"></video>
+
 
 ## 📁 Project Structure
 
@@ -56,104 +58,111 @@ ai agent mcp/
 └── CONTRIBUTING.md      # Contribution guidelines
 ```
 
-## 🚀 Getting Started
+## Prerequisites
 
-### Prerequisites
+Before you begin, ensure you have the following installed:
 
-- **Python**: 3.12 or higher
-- **Node.js**: 20.19.0 or 22.12.0+
-- **PostgreSQL**: For database storage
-- **Redis**: For caching and real-time features (optional)
+*   **Python 3.12+**: The server backend is built with FastAPI.
+*   **Node.js 20+**: The client frontend uses Vue 3 and Vite.
+*   **Docker (Optional)**: Recommended for the easiest setup experience.
 
-### Backend Setup
+## Quick Start (Docker)
 
-1. **Navigate to the server directory**
-   ```bash
-   cd server
-   ```
+If you have Docker installed, you can get the entire stack running in one command.
 
-2. **Install dependencies using uv (recommended)**
-   ```bash
-   pip install uv
-   uv sync
-   ```
-   
-   Or using pip:
-   ```bash
-   pip install -r requirements.txt
-   ```
+1.  **Clone the repository**:
+    ```bash
+    git clone https://github.com/ramblinghermit0403/agent_bridge.git
+    cd agent_bridge
+    ```
 
-3. **Configure environment variables**
-   
-   Create a `.env` file in the `server` directory with the following:
-   ```env
-   # Database
-   DATABASE_URL=postgresql://user:password@localhost:5432/agentbridge
-   
-   # JWT Authentication
-   SECRET_KEY=your-secret-key-here
-   ALGORITHM=HS256
-   ACCESS_TOKEN_EXPIRE_MINUTES=30
-   
-   # Redis (optional)
-   REDIS_URL=redis://localhost:6379
-   
-   # LangChain / AI
-   GOOGLE_API_KEY=your-google-api-key
-   
-   # OAuth (optional)
-   FIGMA_CLIENT_ID=your-figma-client-id
-   FIGMA_CLIENT_SECRET=your-figma-client-secret
-   NOTION_CLIENT_ID=your-notion-client-id
-   NOTION_CLIENT_SECRET=your-notion-client-secret
-   ```
+2.  **Configure Environment Variables**:
+    Before starting, create a `.env` file in the `server/` directory:
+    ```bash
+    cp server/.env.example server/.env
+    ```
+    Edit `server/.env` and add your `GOOGLE_API_KEY` or `OPENAI_API_KEY`.
 
-4. **Run the backend server**
-   ```bash
-   uv run uvicorn app.main:app --reload --port 8001
-   ```
-   
-   The API will be available at `http://localhost:8001`
-   
-   Interactive API docs: `http://localhost:8001/docs`
+3.  **Start the services**:
+    ```bash
+    docker-compose up --build
+    ```
+    *   **Client (Frontend)**: `http://localhost:80`
+    *   **Server (Backend API)**: `http://localhost:8001`
+    *   **Database (PostgreSQL)**: `localhost:5432`
 
-### Frontend Setup
+4.  **Access the application**:
+    Open your browser to [http://localhost](http://localhost).
 
-1. **Navigate to the client directory**
-   ```bash
-   cd client
-   ```
+## Manual Installation (Development)
 
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
+For developers who want to modify the code, running the services manually is recommended.
 
-3. **Run the development server**
-   ```bash
-   npm run dev
-   ```
-   
-   The application will be available at `http://localhost:5173`
+### 1. Backend Setup (Server)
 
-4. **Build for production**
-   ```bash
-   npm run build
-   ```
+The server handles the agent logic, database, and tool execution.
 
-### Run with Docker
+1.  **Navigate to the server directory**:
+    ```powershell
+    cd server
+    ```
 
-1. **Ensure Docker and Docker Compose are installed.**
+2.  **Create a virtual environment**:
+    We recommend using `uv` or `venv`.
+    ```powershell
+    uv venv
+    # or
+    python -m venv .venv
+    ```
 
-2. **Configure environment variables:**
-   Copy `.env.example` to `.env` in both `server/` and `client/AgentBridge/` directories and update the values.
+3.  **Activate the environment**:
+    ```powershell
+    .venv\Scripts\activate.ps1
+    ```
 
-3. **Run the services:**
-   ```bash
-   docker-compose up --build
-   ```
+4.  **Install dependencies**:
+    ```powershell
+    uv pip install -r requirements.txt
+    # or
+    pip install -r requirements.txt
+    ```
 
-   The backend will be available at `http://localhost:8001` and the frontend at `http://localhost:80`.
+5.  **Configure Environment Variables**:
+    Create a `.env` file from the example:
+    ```powershell
+    cp .env.example .env
+    ```
+    Edit `.env` and configure the required keys:
+    *   `GOOGLE_API_KEY` - For Gemini models.
+    *   `OPENAI_API_KEY` - For OpenAI models (optional).
+    *   `DATABASE_URL` - PostgreSQL connection string (optional, defaults to SQLite for local dev).
+    *   `PINECONE_API_KEY` - For vector search (optional).
+
+6.  **Run the Server**:
+    ```powershell
+    uv run uvicorn app.main:app --reload --port 8001
+    ```
+    The API will be available at `http://localhost:8001`.
+
+### 2. Frontend Setup (Client)
+
+The client provides the web interface for chatting and managing agents.
+
+1.  **Navigate to the client directory**:
+    ```powershell
+    cd client
+    ```
+
+2.  **Install dependencies**:
+    ```powershell
+    npm install
+    ```
+
+3.  **Run the Development Server**:
+    ```powershell
+    npm run dev
+    ```
+    The application will be available at `http://localhost:5173`.
 
 ## 🔧 Configuration
 
@@ -170,26 +179,19 @@ This will automatically register or update all servers defined in the configurat
 
 The application automatically creates database tables on startup. For manual migrations or schema updates, use SQLAlchemy migrations.
 
-## 📖 Usage
+## Usage
 
-### Authentication
+### First Run & Authentication
 
-1. **Sign Up**: Create a new account through the frontend UI
-2. **Login**: Authenticate to receive a JWT token
-3. **API Access**: Use the token in the `Authorization: Bearer <token>` header
+1.  **Create your first user**:
+    When you first open the app, you will be prompted to log in. Since there are no users yet, you may need to use the registration endpoint or seed script (if available).
+    *   *Default Dev User*: `admin@example.com` / `password` (check `server/scripts` if applicable).
 
-### Agent Interaction
+2.  **Connect a Provider**:
+    Go to **Settings** -> **AI Providers** and ensure you have at least one LLM provider configured (Gemini or OpenAI).
 
-1. Navigate to the **Dashboard** after logging in
-2. Configure your **Tool Permissions** in Settings
-3. Interact with the AI agent through the chat interface
-4. The agent can execute tools based on your permissions
-
-### Tool Management
-
-- **View Available Tools**: See all tools from connected MCP servers
-- **Grant Permissions**: Control which tools the agent can use
-- **Execute Tools**: Run tools manually or let the agent decide
+3.  **Start Chatting**:
+    Navigate to the **Chat** page and select an agent to start a new conversation!
 
 ## 🛠️ Technology Stack
 
