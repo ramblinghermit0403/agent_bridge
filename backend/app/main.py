@@ -1,5 +1,5 @@
 from dotenv import load_dotenv
-load_dotenv(override=True)
+load_dotenv()
 
 from fastapi import FastAPI, Request
 import nest_asyncio

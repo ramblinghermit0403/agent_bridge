@@ -3,24 +3,31 @@ import os
 import sys
 
 # --- Configuration ---
-# Read connection details from environment variables for flexibility.
-# Provide sensible defaults for local development.
-REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
-REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
-# Use DB 1 as you requested.
-REDIS_DB = int(os.getenv("REDIS_DB", 1))
+# Prioritize REDIS_URL or REDIS_URL_MEMORY
+REDIS_URL = os.getenv("REDIS_URL", os.getenv("REDIS_URL_MEMORY"))
 
-# --- The Client Instance ---
-# This is the single, direct Redis client instance for your application.
-# `decode_responses=True` is CRUCIAL. It ensures that data read from Redis
-# is automatically converted from bytes to standard Python strings.
 try:
-    redis_client = redis.Redis(
-        host=REDIS_HOST,
-        port=REDIS_PORT,
-        db=REDIS_DB,
-        decode_responses=True
-    )
+    if REDIS_URL:
+        # Create client from URL
+        redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
+        
+        # Extract details for logging
+        conn_kwargs = redis_client.connection_pool.connection_kwargs
+        REDIS_HOST = conn_kwargs.get("host")
+        REDIS_PORT = conn_kwargs.get("port")
+        REDIS_DB = conn_kwargs.get("db")
+    else:
+        # Fallback to individual variables
+        REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+        REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
+        REDIS_DB = int(os.getenv("REDIS_DB", 1))
+
+        redis_client = redis.Redis(
+            host=REDIS_HOST,
+            port=REDIS_PORT,
+            db=REDIS_DB,
+            decode_responses=True
+        )
     
     # Check if the connection is successful when the app starts.
     redis_client.ping()
@@ -28,17 +35,17 @@ try:
 
     # --- Async Client Instance ---
     import redis.asyncio as aioredis
-    async_redis_client = aioredis.Redis(
-        host=REDIS_HOST,
-        port=REDIS_PORT,
-        db=REDIS_DB,
-        decode_responses=True
-    )
-    # We can't easily ping here because we are in top-level sync code, 
-    # but the settings are the same as the sync client.
+    
+    if REDIS_URL:
+         async_redis_client = aioredis.from_url(REDIS_URL, decode_responses=True)
+    else:
+        async_redis_client = aioredis.Redis(
+            host=REDIS_HOST,
+            port=REDIS_PORT,
+            db=REDIS_DB,
+            decode_responses=True
+        )
 
-except redis.exceptions.ConnectionError as e:
-    print(f"FATAL: Could not connect to Redis at {REDIS_HOST}:{REDIS_PORT}. Please ensure it is running.", file=sys.stderr)
-    print(f"Error details: {e}", file=sys.stderr)
-    # Exit the application if Redis is not available, as it's a critical service.
+except Exception as e:
+    print(f"FATAL: Could not connect to Redis. Error: {e}", file=sys.stderr)
     sys.exit(1)
