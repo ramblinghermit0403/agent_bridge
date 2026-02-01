@@ -3,14 +3,19 @@ import { withMermaid } from 'vitepress-plugin-mermaid';
 /**
  * @type {import('vitepress').UserConfig}
  */
+
 export default withMermaid({
+    // Only use the sub-path during production builds on GitHub
+    base: process.env.GITHUB_ACTIONS === 'true'
+        ? '/agent_bridge/'
+        : '/',
+
     title: "Agent Bridge",
     description: "AI Agent Platform with MCP Support",
     head: [
         ['link', { rel: 'icon', href: '/favicon.ico' }]
     ],
     mermaid: {
-        // refer to mermaidjs docs for options
         theme: 'default',
     },
     themeConfig: {
@@ -74,6 +79,5 @@ export default withMermaid({
         ]
     },
     srcDir: '.',
-    rewrites: {
-    }
+    rewrites: {}
 })

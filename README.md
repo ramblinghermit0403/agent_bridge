@@ -158,6 +158,27 @@ The client provides the web interface for chatting and managing agents.
     ```
     The application will be available at `http://localhost:5173`.
 
+### 3. Documentation Setup
+
+The documentation (VitePress) can be run locally for development.
+
+1.  **Navigate to the docs directory**:
+    ```powershell
+    cd docs
+    ```
+
+2.  **Install dependencies**:
+    ```powershell
+    npm install
+    ```
+
+3.  **Run the Documentation Server**:
+    ```powershell
+    npm run docs:dev
+    ```
+    The docs will be available at `http://localhost:5173` (or the next available port).
+
+
 ## 🔧 Configuration
 
 ### MCP Server Configuration
