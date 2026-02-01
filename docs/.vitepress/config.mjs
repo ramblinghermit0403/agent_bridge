@@ -10,7 +10,7 @@ export default withMermaid({
         ? '/agent_bridge/'
         : '/',
 
-    title: "Agent Bridge",
+    title: "AgentBridge",
     description: "AI Agent Platform with MCP Support",
     head: [
         ['link', { rel: 'icon', href: '/favicon.ico' }]

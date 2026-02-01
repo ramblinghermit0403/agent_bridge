@@ -2,9 +2,9 @@
 layout: home
 
 hero:
-  name: "Agent Bridge"
-  text: "The Agent Architecture"
-  tagline: "Scalable. Dynamic. Safe. Built on the Model Context Protocol."
+  name: "Build, Connect, and Scale AI Agents."
+  text: "The enterprise-ready foundation for the Model Context Protocol. Orchestrate complex workflows with safety and precision."
+  tagline: "The Open Source Agent Architecture" 
   actions:
     - theme: brand
       text: Start Learning
@@ -35,9 +35,9 @@ features:
 
 ---
 
-<div class="minimal-footer" style="padding: 4rem 0; text-align: center; border-top: 1px solid var(--vp-c-divider);">
-  <h2 style="font-weight: 600; margin-bottom: 1rem; border: none;">Engineered for Production</h2>
-  <p style="max-width: 600px; margin: 0 auto; color: var(--vp-c-text-2);">
+<div class="minimal-footer" style="padding: 6rem 0; text-align: center; border-top: 1px solid var(--vp-c-divider);">
+  <h2 style="font-weight: 700; font-size: 24px; margin-bottom: 1rem; border: none; letter-spacing: -0.01em;">Engineered for Production</h2>
+  <p style="max-width: 600px; margin: 0 auto; color: var(--vp-c-text-2); font-size: 18px; line-height: 1.6;">
     Agent Bridge provides the foundational layer for building enterprise-grade AI agents. 
     Focus on your tools and prompts while we handle state, security, and orchestration.
   </p>

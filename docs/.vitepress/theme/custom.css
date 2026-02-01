@@ -1,63 +1,243 @@
-/* Black & White Monotone Theme */
+/* Arcade-inspired "AgentBridge" Theme */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 :root {
-    /* Override VitePress brand colors with monotone */
-    --vp-c-brand-1: #1a1a1a;
-    --vp-c-brand-2: #333333;
-    --vp-c-brand-3: #4a4a4a;
-    --vp-c-brand-soft: rgba(0, 0, 0, 0.1);
-    
-    /* Hero section */
-    --vp-home-hero-name-color: #000000;
-    --vp-home-hero-name-background: none;
-    
-    /* Button colors */
-    --vp-button-brand-bg: #000000;
-    --vp-button-brand-hover-bg: #333333;
-    --vp-button-brand-active-bg: #1a1a1a;
-    --vp-button-alt-bg: #f5f5f5;
-    --vp-button-alt-hover-bg: #e0e0e0;
-    --vp-button-alt-border: #cccccc;
-    --vp-button-alt-text: #000000;
+    /* Core Colors */
+    --vp-c-brand-1: #2563eb;
+    /* Vivid Blue */
+    --vp-c-brand-2: #1d4ed8;
+    --vp-c-brand-3: #1e40af;
+    --vp-c-brand-soft: rgba(37, 99, 235, 0.1);
+
+    /* Backgrounds */
+    --vp-c-bg: #ffffff;
+    --vp-c-bg-alt: #f8fafc;
+
+    /* Typography Colors */
+    --vp-home-hero-name-color: #0f172a;
+    /* Slate 900 */
+    --vp-home-hero-text-color: #475569;
+    /* Slate 600 */
+    --vp-home-hero-tagline-color: #0f172a;
+
+    /* Button Colors */
+    --vp-button-brand-bg: #2563eb;
+    --vp-button-brand-hover-bg: #1d4ed8;
+    --vp-button-brand-active-bg: #1e40af;
+    --vp-button-brand-text: #ffffff;
+    --vp-button-alt-bg: #ffffff;
+    --vp-button-alt-hover-bg: #f8fafc;
+    --vp-button-alt-border: #e2e8f0;
+    --vp-button-alt-text: #0f172a;
+
+    /* Fonts */
+    --vp-font-family-base: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
 }
 
 .dark {
-    /* Dark mode monotone */
-    --vp-c-brand-1: #ffffff;
-    --vp-c-brand-2: #e0e0e0;
-    --vp-c-brand-3: #cccccc;
-    --vp-c-brand-soft: rgba(255, 255, 255, 0.1);
-    
-    --vp-home-hero-name-color: #ffffff;
-    
-    --vp-button-brand-bg: #ffffff;
-    --vp-button-brand-hover-bg: #e0e0e0;
-    --vp-button-brand-active-bg: #cccccc;
-    --vp-button-brand-text: #000000;
-    --vp-button-alt-bg: #2a2a2a;
-    --vp-button-alt-hover-bg: #3a3a3a;
-    --vp-button-alt-border: #4a4a4a;
+    /* Dark Mode Adaptations - keeping it deep blue/slate */
+    --vp-c-bg: #020617;
+    --vp-c-bg-alt: #0f172a;
+    --vp-home-hero-name-color: #f8fafc;
+    --vp-home-hero-text-color: #cbd5e1;
+    --vp-button-alt-bg: #1e293b;
+    --vp-button-alt-border: #334155;
+    --vp-button-alt-text: #f8fafc;
 }
 
-/* Hero name gradient override */
+/* Base Layout & Background */
+.VPHome {
+    position: relative;
+    isolation: isolate;
+    background-color: var(--vp-c-bg);
+    overflow-x: hidden;
+    /* Prevent horizontal scroll from blur */
+}
+
+/* The "Arcade" Gradient - Bottom Right Blue Blur */
+.VPHome::before {
+    content: '';
+    position: absolute;
+    /* Position largely to the right and bottom */
+    top: 20%;
+    right: -10%;
+    width: 80%;
+    height: 120vh;
+    background: radial-gradient(circle closest-side, rgba(37, 99, 235, 0.25), transparent);
+    filter: blur(80px);
+    z-index: -1;
+    pointer-events: none;
+    opacity: 1;
+}
+
+/* Dark mode gradient adjustment */
+.dark .VPHome::before {
+    background: radial-gradient(circle closest-side, rgba(37, 99, 235, 0.4), transparent);
+    opacity: 0.6;
+}
+
+
+/* -------------------------------------------
+   Hero Section Customization
+------------------------------------------- */
+
+/* Container - Centered and max-width */
+.VPHero .container {
+    max-width: 1200px !important;
+    margin: 0 auto;
+    text-align: center;
+    padding-top: 4rem !important;
+}
+
+.VPHero .main {
+    display: flex !important;
+    flex-direction: column;
+    align-items: center;
+    margin: 0 auto !important;
+}
+
+/* 1. The Tagline (Badge) - Ordered FIRST */
+.VPHero .tagline {
+    order: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 16px;
+    background: #f1f5f9;
+    /* Slate 100 */
+    border: 1px solid #e2e8f0;
+    border-radius: 9999px;
+    /* Pill shape */
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    color: #475569 !important;
+    margin-bottom: 2rem !important;
+    line-height: 1.2;
+}
+
+.dark .VPHero .tagline {
+    background: #1e293b;
+    border-color: #334155;
+    color: #94a3b8 !important;
+}
+
+/* 2. The Name (Main Title) - Ordered SECOND */
 .VPHero .name {
+    order: 2;
+    font-size: 72px !important;
+    line-height: 1.05 !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.03em !important;
+    color: var(--vp-home-hero-name-color) !important;
+    margin-bottom: 1.5rem !important;
     background: none !important;
-    -webkit-background-clip: unset !important;
-    background-clip: unset !important;
     -webkit-text-fill-color: currentColor !important;
+    max-width: 900px;
 }
 
-/* Feature cards - monotone borders */
+@media (max-width: 768px) {
+    .VPHero .name {
+        font-size: 48px !important;
+    }
+}
+
+/* 3. The Text (Subtitle) - Ordered THIRD */
+.VPHero .text {
+    order: 3;
+    font-size: 20px !important;
+    line-height: 1.5 !important;
+    color: var(--vp-home-hero-text-color) !important;
+    margin-bottom: 2.5rem !important;
+    max-width: 600px !important;
+    margin-left: auto;
+    margin-right: auto;
+    font-weight: 400 !important;
+}
+
+/* 4. Actions (Buttons) - Ordered FOURTH */
+.VPHero .actions {
+    order: 4;
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+/* Button Styling - Pill Shape */
+.VPButton {
+    border-radius: 9999px !important;
+    /* Pill */
+    padding: 0 32px !important;
+    height: 48px !important;
+    line-height: 48px !important;
+    font-size: 16px !important;
+    font-weight: 600 !important;
+    transition: all 0.2s ease;
+}
+
+.VPButton.brand {
+    background-color: var(--vp-button-brand-bg) !important;
+    color: white !important;
+    border: none !important;
+}
+
+.VPButton.brand:hover {
+    background-color: var(--vp-button-brand-hover-bg) !important;
+    transform: translateY(-1px);
+}
+
+.VPButton.alt {
+    background-color: var(--vp-button-alt-bg) !important;
+    border: 1px solid var(--vp-button-alt-border) !important;
+    color: var(--vp-button-alt-text) !important;
+}
+
+.VPButton.alt:hover {
+    background-color: var(--vp-button-alt-hover-bg) !important;
+    border-color: #cbd5e1 !important;
+}
+
+/* -------------------------------------------
+   Feature Cards - Minimal & Clean
+------------------------------------------- */
+.VPFeatures {
+    padding-top: 4rem !important;
+    background: transparent !important;
+}
+
 .VPFeature {
-    border-color: var(--vp-c-divider) !important;
+    background: rgba(255, 255, 255, 0.5) !important;
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(226, 232, 240, 0.6) !important;
+    border-radius: 16px !important;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-/* Clean link styling */
-.VPLink {
-    color: inherit;
+.dark .VPFeature {
+    background: rgba(30, 41, 59, 0.5) !important;
+    border-color: rgba(51, 65, 85, 0.6) !important;
 }
 
-/* Invert logo in dark mode */
-.dark .VPNavBarTitle .logo {
-    filter: invert(1);
+.VPFeature:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+}
+
+.VPFeature .title {
+    font-weight: 600 !important;
+}
+
+/* Reset Navbar Title Font */
+.VPNavBarTitle {
+    font-weight: 700 !important;
+    letter-spacing: -0.02em;
+}
+
+/* -------------------------------------------
+   Arcade Hero Component Overrides
+------------------------------------------- */
+/* Ensure the injected ArcadeHero sits nicely */
+.home-hero-after {
+    margin-top: 2rem;
+    padding: 0 24px;
 }
