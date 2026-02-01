@@ -2,7 +2,7 @@ name: Deploy VitePress site to Pages
 
 on:
   push:
-    branches: [main] # Verify if your primary branch is named 'main' or 'master'
+    branches: [main]
 
 permissions:
   contents: read
@@ -21,17 +21,23 @@ jobs:
         with:
           node-version: 20
           cache: 'npm'
+          # Add this line to tell GitHub where the lock file is:
+          cache-dependency-path: docs/package-lock.json 
 
       - name: Install dependencies
         run: npm install
+        working-directory: docs
 
       - name: Build with VitePress
+        # Added working-directory to run the build command inside /docs
         run: npm run docs:build
+        working-directory: docs
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .vitepress/dist
+          # Changed path to reflect that dist is inside docs/.vitepress/
+          path: docs/.vitepress/dist
 
   deploy:
     environment:
