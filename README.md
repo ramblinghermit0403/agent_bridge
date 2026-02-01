@@ -17,6 +17,8 @@
 
 ## 📚 Documentation
 
+https://ramblinghermit0403.github.io/agent_bridge/
+
 For detailed configuration guides, please see:
 
 - [**Supported MCP Servers**](docs/guide/mcp-servers.md): Setup guide for Figma, GitHub, Notion, and custom servers.
