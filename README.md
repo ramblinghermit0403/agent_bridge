@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="client/public/favicon.ico" alt="Agent Bridge Logo" width="120" />
+  <img src="client/public/favicon.ico" alt="Agent Bridge Logo" width="120" style="filter: brightness(0) invert(1);" />
   <h1>Agent Bridge</h1>
   <p><strong>A modular AI agent platform connecting LangChain & FastAPI with Model Context Protocol (MCP) servers.</strong></p>
 
