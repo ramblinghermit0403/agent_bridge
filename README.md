@@ -1,11 +1,11 @@
 <div align="center">
-  <img src="client/src/assets/logo.png" alt="Agent Bridge Logo" width="160" />
+  <img src="client/public/favicon.ico" alt="Agent Bridge Logo" width="120" />
   <h1>Agent Bridge</h1>
   <p><strong>A modular AI agent platform connecting LangChain & FastAPI with Model Context Protocol (MCP) servers.</strong></p>
 
   <p>
     <a href="https://github.com/punkpeye/awesome-mcp-clients/pull/140">
-      <img src="https://img.shields.io/badge/Awesome-MCP_Clients-5865F2?style=for-the-badge&logo=github" alt="Awesome MCP Clients" />
+      <img src="https://img.shields.io/badge/Awesome-MCP_Clients-5865F2?style=for-the-badge&logo=awesome-lists" alt="Awesome MCP Clients" />
     </a>
     <a href="https://opensource.org/licenses/MIT">
       <img src="https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge" alt="License: MIT" />
